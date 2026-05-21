@@ -16,6 +16,10 @@
  */
 
 export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
+  drawingBufferColorSpace: "srgb" | "display-p3";
+  readonly drawingBufferFormat: number;
+  unpackColorSpace: "srgb" | "display-p3";
+  drawingBufferStorage(sizedFormat: number, width: number, height: number): void;
   createVertexArray(): WebGLVertexArrayObject | number | null;
   bindVertexArray(vertexArray: WebGLVertexArrayObject | number | null): void;
   deleteVertexArray(vertexArray: WebGLVertexArrayObject | number | null): void;

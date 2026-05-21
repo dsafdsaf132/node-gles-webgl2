@@ -21,6 +21,7 @@
 #include <node_api.h>
 
 #include <atomic>
+#include <string>
 
 #include "egl_context_wrapper.h"
 
@@ -68,6 +69,10 @@ class WebGLRenderingContext {
   static napi_value CheckFramebufferStatus(napi_env env,
                                            napi_callback_info info);
   static napi_value Clear(napi_env env, napi_callback_info info);
+  static napi_value ClearBufferfi(napi_env env, napi_callback_info info);
+  static napi_value ClearBufferfv(napi_env env, napi_callback_info info);
+  static napi_value ClearBufferiv(napi_env env, napi_callback_info info);
+  static napi_value ClearBufferuiv(napi_env env, napi_callback_info info);
   static napi_value ClearColor(napi_env env, napi_callback_info info);
   static napi_value ClearDepth(napi_env env, napi_callback_info info);
   static napi_value ClearStencil(napi_env env, napi_callback_info info);
@@ -115,12 +120,14 @@ class WebGLRenderingContext {
   static napi_value Disable(napi_env env, napi_callback_info info);
   static napi_value DisableVertexAttribArray(napi_env env,
                                              napi_callback_info info);
+  static napi_value DrawingBufferStorage(napi_env env, napi_callback_info info);
   static napi_value DrawArrays(napi_env env, napi_callback_info info);
   static napi_value DrawArraysInstanced(napi_env env, napi_callback_info info);
   static napi_value DrawBuffers(napi_env env, napi_callback_info info);
   static napi_value DrawElements(napi_env env, napi_callback_info info);
   static napi_value DrawElementsInstanced(napi_env env,
                                           napi_callback_info info);
+  static napi_value DrawRangeElements(napi_env env, napi_callback_info info);
   static napi_value Enable(napi_env env, napi_callback_info info);
   static napi_value EnableVertexAttribArray(napi_env env,
                                             napi_callback_info info);
@@ -141,9 +148,24 @@ class WebGLRenderingContext {
   static napi_value GetAttribLocation(napi_env env, napi_callback_info info);
   static napi_value GetActiveAttrib(napi_env env, napi_callback_info info);
   static napi_value GetActiveUniform(napi_env env, napi_callback_info info);
+  static napi_value GetActiveUniformBlockName(napi_env env,
+                                              napi_callback_info info);
+  static napi_value GetActiveUniformBlockParameter(napi_env env,
+                                                   napi_callback_info info);
+  static napi_value GetActiveUniforms(napi_env env, napi_callback_info info);
   static napi_value GetBufferParameter(napi_env env, napi_callback_info info);
   static napi_value GetBufferSubData(napi_env env, napi_callback_info info);
   static napi_value GetContextAttributes(napi_env env, napi_callback_info info);
+  static napi_value GetDrawingBufferFormat(napi_env env,
+                                           napi_callback_info info);
+  static napi_value GetDrawingBufferHeight(napi_env env,
+                                           napi_callback_info info);
+  static napi_value GetDrawingBufferWidth(napi_env env,
+                                          napi_callback_info info);
+  static napi_value GetDrawingBufferColorSpace(napi_env env,
+                                               napi_callback_info info);
+  static napi_value SetDrawingBufferColorSpace(napi_env env,
+                                               napi_callback_info info);
   static napi_value GetError(napi_env env, napi_callback_info info);
   static napi_value GetFramebufferAttachmentParameter(napi_env env,
                                                       napi_callback_info info);
@@ -164,15 +186,24 @@ class WebGLRenderingContext {
                                              napi_callback_info info);
   static napi_value GetShaderInfoLog(napi_env env, napi_callback_info info);
   static napi_value GetShaderParameter(napi_env env, napi_callback_info info);
+  static napi_value GetShaderSource(napi_env env, napi_callback_info info);
   static napi_value GetSyncParameter(napi_env env, napi_callback_info info);
   static napi_value GetSupportedExtensions(napi_env env,
                                            napi_callback_info info);
   static napi_value GetTexParameter(napi_env env, napi_callback_info info);
   static napi_value GetTransformFeedbackVarying(napi_env env,
                                                 napi_callback_info info);
+  static napi_value GetUnpackColorSpace(napi_env env, napi_callback_info info);
+  static napi_value SetUnpackColorSpace(napi_env env, napi_callback_info info);
+  static napi_value GetUniform(napi_env env, napi_callback_info info);
+  static napi_value GetUniformBlockIndex(napi_env env, napi_callback_info info);
+  static napi_value GetUniformIndices(napi_env env, napi_callback_info info);
   static napi_value GetUniformLocation(napi_env env, napi_callback_info info);
+  static napi_value GetVertexAttrib(napi_env env, napi_callback_info info);
   static napi_value GetVertexAttribIiv(napi_env env, napi_callback_info info);
   static napi_value GetVertexAttribIuiv(napi_env env, napi_callback_info info);
+  static napi_value GetVertexAttribOffset(napi_env env,
+                                          napi_callback_info info);
   static napi_value Hint(napi_env env, napi_callback_info info);
   static napi_value IsBuffer(napi_env env, napi_callback_info info);
   static napi_value IsContextLost(napi_env env, napi_callback_info info);
@@ -193,6 +224,8 @@ class WebGLRenderingContext {
                                              napi_callback_info info);
   static napi_value LineWidth(napi_env env, napi_callback_info info);
   static napi_value LinkProgram(napi_env env, napi_callback_info info);
+  static napi_value PauseTransformFeedback(napi_env env,
+                                           napi_callback_info info);
   static napi_value PixelStorei(napi_env env, napi_callback_info info);
   static napi_value PolygonOffset(napi_env env, napi_callback_info info);
   static napi_value ReadPixels(napi_env env, napi_callback_info info);
@@ -200,6 +233,8 @@ class WebGLRenderingContext {
   static napi_value RenderbufferStorage(napi_env env, napi_callback_info info);
   static napi_value RenderbufferStorageMultisample(napi_env env,
                                                    napi_callback_info info);
+  static napi_value ResumeTransformFeedback(napi_env env,
+                                            napi_callback_info info);
   static napi_value SampleCoverage(napi_env env, napi_callback_info info);
   static napi_value SamplerParameterf(napi_env env, napi_callback_info info);
   static napi_value SamplerParameteri(napi_env env, napi_callback_info info);
@@ -215,6 +250,8 @@ class WebGLRenderingContext {
   static napi_value TexImage3D(napi_env env, napi_callback_info info);
   static napi_value TexParameteri(napi_env env, napi_callback_info info);
   static napi_value TexParameterf(napi_env env, napi_callback_info info);
+  static napi_value TexStorage2D(napi_env env, napi_callback_info info);
+  static napi_value TexStorage3D(napi_env env, napi_callback_info info);
   static napi_value TexSubImage2D(napi_env env, napi_callback_info info);
   static napi_value TexSubImage3D(napi_env env, napi_callback_info info);
   static napi_value TransformFeedbackVaryings(napi_env env,
@@ -243,6 +280,7 @@ class WebGLRenderingContext {
   static napi_value Uniform4f(napi_env env, napi_callback_info info);
   static napi_value Uniform4ui(napi_env env, napi_callback_info info);
   static napi_value Uniform4uiv(napi_env env, napi_callback_info info);
+  static napi_value UniformBlockBinding(napi_env env, napi_callback_info info);
   static napi_value UniformMatrix2fv(napi_env env, napi_callback_info info);
   static napi_value UniformMatrix2x3fv(napi_env env, napi_callback_info info);
   static napi_value UniformMatrix2x4fv(napi_env env, napi_callback_info info);
@@ -279,6 +317,8 @@ class WebGLRenderingContext {
   napi_env env_;
   napi_ref ref_;
   EGLContextWrapper* eglContextWrapper_;
+  std::string drawing_buffer_color_space_;
+  std::string unpack_color_space_;
 
   std::atomic<size_t> alloc_count_;
 };

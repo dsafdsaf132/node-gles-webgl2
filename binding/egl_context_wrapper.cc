@@ -27,7 +27,10 @@
 namespace nodejsgl {
 
 EGLContextWrapper::EGLContextWrapper(napi_env env,
-                                     const GLContextOptions& context_options) {
+                                     const GLContextOptions& context_options)
+    : context(EGL_NO_CONTEXT), display(EGL_NO_DISPLAY), config(nullptr),
+      surface(EGL_NO_SURFACE), drawing_buffer_width(0),
+      drawing_buffer_height(0), drawing_buffer_format(GL_RGBA8) {
   InitEGL(env, context_options);
   BindProcAddresses();
   RefreshGLExtensions();
@@ -160,10 +163,58 @@ void EGLContextWrapper::InitEGL(napi_env env,
     return;
   }
 
+  EGLint actual_width = 0;
+  EGLint actual_height = 0;
+  eglQuerySurface(display, surface, EGL_WIDTH, &actual_width);
+  eglQuerySurface(display, surface, EGL_HEIGHT, &actual_height);
+  drawing_buffer_width = static_cast<uint32_t>(actual_width);
+  drawing_buffer_height = static_cast<uint32_t>(actual_height);
+  drawing_buffer_format = GL_RGBA8;
+
   if (!eglMakeCurrent(display, surface, surface, context)) {
     NAPI_THROW_ERROR(env, "Could not make context current");
     return;
   }
+}
+
+bool EGLContextWrapper::ResizeSurface(napi_env env, uint32_t width,
+                                      uint32_t height) {
+  if (display == EGL_NO_DISPLAY || context == EGL_NO_CONTEXT) {
+    NAPI_THROW_ERROR(env, "EGL context is not initialized");
+    return false;
+  }
+
+  width = width > 0 ? width : 1;
+  height = height > 0 ? height : 1;
+
+  EGLint surface_attribs[] = {EGL_WIDTH, static_cast<EGLint>(width), EGL_HEIGHT,
+                              static_cast<EGLint>(height), EGL_NONE};
+  EGLSurface next_surface =
+      eglCreatePbufferSurface(display, config, surface_attribs);
+  if (next_surface == EGL_NO_SURFACE) {
+    NAPI_THROW_ERROR(env, "Could not create drawing buffer surface");
+    return false;
+  }
+
+  if (!eglMakeCurrent(display, next_surface, next_surface, context)) {
+    eglDestroySurface(display, next_surface);
+    NAPI_THROW_ERROR(env, "Could not make drawing buffer surface current");
+    return false;
+  }
+
+  if (surface != EGL_NO_SURFACE) {
+    eglDestroySurface(display, surface);
+  }
+  surface = next_surface;
+
+  EGLint actual_width = 0;
+  EGLint actual_height = 0;
+  eglQuerySurface(display, surface, EGL_WIDTH, &actual_width);
+  eglQuerySurface(display, surface, EGL_HEIGHT, &actual_height);
+  drawing_buffer_width = static_cast<uint32_t>(actual_width);
+  drawing_buffer_height = static_cast<uint32_t>(actual_height);
+  drawing_buffer_format = GL_RGBA8;
+  return true;
 }
 
 void EGLContextWrapper::BindProcAddresses() {
@@ -215,6 +266,14 @@ void EGLContextWrapper::BindProcAddresses() {
   glCheckFramebufferStatus = reinterpret_cast<PFNGLCHECKFRAMEBUFFERSTATUSPROC>(
       eglGetProcAddress("glCheckFramebufferStatus"));
   glClear = reinterpret_cast<PFNGLCLEARPROC>(eglGetProcAddress("glClear"));
+  glClearBufferfi = reinterpret_cast<PFNGLCLEARBUFFERFIPROC>(
+      eglGetProcAddress("glClearBufferfi"));
+  glClearBufferfv = reinterpret_cast<PFNGLCLEARBUFFERFVPROC>(
+      eglGetProcAddress("glClearBufferfv"));
+  glClearBufferiv = reinterpret_cast<PFNGLCLEARBUFFERIVPROC>(
+      eglGetProcAddress("glClearBufferiv"));
+  glClearBufferuiv = reinterpret_cast<PFNGLCLEARBUFFERUIVPROC>(
+      eglGetProcAddress("glClearBufferuiv"));
   glClearColor =
       reinterpret_cast<PFNGLCLEARCOLORPROC>(eglGetProcAddress("glClearColor"));
   glClearDepthf = reinterpret_cast<PFNGLCLEARDEPTHFPROC>(
@@ -290,6 +349,8 @@ void EGLContextWrapper::BindProcAddresses() {
       eglGetProcAddress("glDrawElements"));
   glDrawElementsInstanced = reinterpret_cast<PFNGLDRAWELEMENTSINSTANCEDPROC>(
       eglGetProcAddress("glDrawElementsInstanced"));
+  glDrawRangeElements = reinterpret_cast<PFNGLDRAWRANGEELEMENTSPROC>(
+      eglGetProcAddress("glDrawRangeElements"));
   glDetachShader = reinterpret_cast<PFNGLDETACHSHADERPROC>(
       eglGetProcAddress("glDetachShader"));
   glDisable =
@@ -352,6 +413,14 @@ void EGLContextWrapper::BindProcAddresses() {
       eglGetProcAddress("glGetActiveAttrib"));
   glGetActiveUniform = reinterpret_cast<PFNGLGETACTIVEUNIFORMPROC>(
       eglGetProcAddress("glGetActiveUniform"));
+  glGetActiveUniformBlockiv =
+      reinterpret_cast<PFNGLGETACTIVEUNIFORMBLOCKIVPROC>(
+          eglGetProcAddress("glGetActiveUniformBlockiv"));
+  glGetActiveUniformBlockName =
+      reinterpret_cast<PFNGLGETACTIVEUNIFORMBLOCKNAMEPROC>(
+          eglGetProcAddress("glGetActiveUniformBlockName"));
+  glGetActiveUniformsiv = reinterpret_cast<PFNGLGETACTIVEUNIFORMSIVPROC>(
+      eglGetProcAddress("glGetActiveUniformsiv"));
   glGetAttachedShaders = reinterpret_cast<PFNGLGETATTACHEDSHADERSPROC>(
       eglGetProcAddress("glGetAttachedShaders"));
   glGetFragDataLocation = reinterpret_cast<PFNGLGETFRAGDATALOCATIONPROC>(
@@ -382,6 +451,8 @@ void EGLContextWrapper::BindProcAddresses() {
   glGetShaderPrecisionFormat =
       reinterpret_cast<PFNGLGETSHADERPRECISIONFORMATPROC>(
           eglGetProcAddress("glGetShaderPrecisionFormat"));
+  glGetShaderSource = reinterpret_cast<PFNGLGETSHADERSOURCEPROC>(
+      eglGetProcAddress("glGetShaderSource"));
   glGetString =
       reinterpret_cast<PFNGLGETSTRINGPROC>(eglGetProcAddress("glGetString"));
   glGetSynciv =
@@ -393,12 +464,29 @@ void EGLContextWrapper::BindProcAddresses() {
   glGetTransformFeedbackVarying =
       reinterpret_cast<PFNGLGETTRANSFORMFEEDBACKVARYINGPROC>(
           eglGetProcAddress("glGetTransformFeedbackVarying"));
+  glGetUniformfv = reinterpret_cast<PFNGLGETUNIFORMFVPROC>(
+      eglGetProcAddress("glGetUniformfv"));
+  glGetUniformiv = reinterpret_cast<PFNGLGETUNIFORMIVPROC>(
+      eglGetProcAddress("glGetUniformiv"));
+  glGetUniformuiv = reinterpret_cast<PFNGLGETUNIFORMUIVPROC>(
+      eglGetProcAddress("glGetUniformuiv"));
+  glGetUniformBlockIndex = reinterpret_cast<PFNGLGETUNIFORMBLOCKINDEXPROC>(
+      eglGetProcAddress("glGetUniformBlockIndex"));
+  glGetUniformIndices = reinterpret_cast<PFNGLGETUNIFORMINDICESPROC>(
+      eglGetProcAddress("glGetUniformIndices"));
   glGetUniformLocation = reinterpret_cast<PFNGLGETUNIFORMLOCATIONPROC>(
       eglGetProcAddress("glGetUniformLocation"));
+  glGetVertexAttribfv = reinterpret_cast<PFNGLGETVERTEXATTRIBFVPROC>(
+      eglGetProcAddress("glGetVertexAttribfv"));
   glGetVertexAttribIiv = reinterpret_cast<PFNGLGETVERTEXATTRIBIIVPROC>(
       eglGetProcAddress("glGetVertexAttribIiv"));
   glGetVertexAttribIuiv = reinterpret_cast<PFNGLGETVERTEXATTRIBIUIVPROC>(
       eglGetProcAddress("glGetVertexAttribIuiv"));
+  glGetVertexAttribiv = reinterpret_cast<PFNGLGETVERTEXATTRIBIVPROC>(
+      eglGetProcAddress("glGetVertexAttribiv"));
+  glGetVertexAttribPointerv =
+      reinterpret_cast<PFNGLGETVERTEXATTRIBPOINTERVPROC>(
+          eglGetProcAddress("glGetVertexAttribPointerv"));
   glHint = reinterpret_cast<PFNGLHINTPROC>(eglGetProcAddress("glHint"));
   glIsBuffer =
       reinterpret_cast<PFNGLISBUFFERPROC>(eglGetProcAddress("glIsBuffer"));
@@ -434,6 +522,8 @@ void EGLContextWrapper::BindProcAddresses() {
       eglGetProcAddress("glLinkProgram"));
   glMapBufferRange = reinterpret_cast<PFNGLMAPBUFFERRANGEPROC>(
       eglGetProcAddress("glMapBufferRange"));
+  glPauseTransformFeedback = reinterpret_cast<PFNGLPAUSETRANSFORMFEEDBACKPROC>(
+      eglGetProcAddress("glPauseTransformFeedback"));
   glPixelStorei = reinterpret_cast<PFNGLPIXELSTOREIPROC>(
       eglGetProcAddress("glPixelStorei"));
   glPolygonOffset = reinterpret_cast<PFNGLPOLYGONOFFSETPROC>(
@@ -447,6 +537,9 @@ void EGLContextWrapper::BindProcAddresses() {
   glRenderbufferStorageMultisample =
       reinterpret_cast<PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC>(
           eglGetProcAddress("glRenderbufferStorageMultisample"));
+  glResumeTransformFeedback =
+      reinterpret_cast<PFNGLRESUMETRANSFORMFEEDBACKPROC>(
+          eglGetProcAddress("glResumeTransformFeedback"));
   glSampleCoverage = reinterpret_cast<PFNGLSAMPLECOVERAGEPROC>(
       eglGetProcAddress("glSampleCoverage"));
   glSamplerParameterf = reinterpret_cast<PFNGLSAMPLERPARAMETERFPROC>(
@@ -477,6 +570,10 @@ void EGLContextWrapper::BindProcAddresses() {
       eglGetProcAddress("glTexParameteri"));
   glTexParameterf = reinterpret_cast<PFNGLTEXPARAMETERFPROC>(
       eglGetProcAddress("glTexParameterf"));
+  glTexStorage2D = reinterpret_cast<PFNGLTEXSTORAGE2DPROC>(
+      eglGetProcAddress("glTexStorage2D"));
+  glTexStorage3D = reinterpret_cast<PFNGLTEXSTORAGE3DPROC>(
+      eglGetProcAddress("glTexStorage3D"));
   glTexSubImage2D = reinterpret_cast<PFNGLTEXSUBIMAGE2DPROC>(
       eglGetProcAddress("glTexSubImage2D"));
   glTexSubImage3D = reinterpret_cast<PFNGLTEXSUBIMAGE3DPROC>(
@@ -532,6 +629,8 @@ void EGLContextWrapper::BindProcAddresses() {
       reinterpret_cast<PFNGLUNIFORM4UIPROC>(eglGetProcAddress("glUniform4ui"));
   glUniform4uiv = reinterpret_cast<PFNGLUNIFORM4UIVPROC>(
       eglGetProcAddress("glUniform4uiv"));
+  glUniformBlockBinding = reinterpret_cast<PFNGLUNIFORMBLOCKBINDINGPROC>(
+      eglGetProcAddress("glUniformBlockBinding"));
   glUniformMatrix2fv = reinterpret_cast<PFNGLUNIFORMMATRIX2FVPROC>(
       eglGetProcAddress("glUniformMatrix2fv"));
   glUniformMatrix2x3fv = reinterpret_cast<PFNGLUNIFORMMATRIX2X3FVPROC>(
@@ -606,11 +705,27 @@ void EGLContextWrapper::RefreshGLExtensions() {
 }
 
 EGLContextWrapper::~EGLContextWrapper() {
-  if (context) {
+  if (display != EGL_NO_DISPLAY) {
+    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+  }
+
+  if (surface != EGL_NO_SURFACE) {
+    if (!eglDestroySurface(display, surface)) {
+      std::cerr << "Failed to delete EGL surface: " << std::endl;
+    }
+    surface = EGL_NO_SURFACE;
+  }
+
+  if (context != EGL_NO_CONTEXT) {
     if (!eglDestroyContext(display, context)) {
       std::cerr << "Failed to delete EGL context: " << std::endl;
     }
-    context = nullptr;
+    context = EGL_NO_CONTEXT;
+  }
+
+  if (display != EGL_NO_DISPLAY) {
+    eglTerminate(display);
+    display = EGL_NO_DISPLAY;
   }
 
   // TODO(kreeger): Close context attributes.

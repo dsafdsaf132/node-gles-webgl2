@@ -82,10 +82,15 @@ class EGLContextWrapper {
   static EGLContextWrapper* Create(napi_env env,
                                    const GLContextOptions& context_options);
 
+  bool ResizeSurface(napi_env env, uint32_t width, uint32_t height);
+
   EGLContext context;
   EGLDisplay display;
   EGLConfig config;
   EGLSurface surface;
+  uint32_t drawing_buffer_width;
+  uint32_t drawing_buffer_height;
+  GLenum drawing_buffer_format;
 
   std::unique_ptr<GLExtensionsWrapper> egl_extensions;
   std::unique_ptr<GLExtensionsWrapper> gl_extensions;
@@ -116,6 +121,10 @@ class EGLContextWrapper {
   PFNGLBUFFERSUBDATAPROC glBufferSubData;
   PFNGLCHECKFRAMEBUFFERSTATUSPROC glCheckFramebufferStatus;
   PFNGLCLEARPROC glClear;
+  PFNGLCLEARBUFFERFIPROC glClearBufferfi;
+  PFNGLCLEARBUFFERFVPROC glClearBufferfv;
+  PFNGLCLEARBUFFERIVPROC glClearBufferiv;
+  PFNGLCLEARBUFFERUIVPROC glClearBufferuiv;
   PFNGLCLEARCOLORPROC glClearColor;
   PFNGLCLEARDEPTHFPROC glClearDepthf;
   PFNGLCLEARSTENCILPROC glClearStencil;
@@ -155,6 +164,7 @@ class EGLContextWrapper {
   PFNGLDRAWBUFFERSPROC glDrawBuffers;
   PFNGLDRAWELEMENTSPROC glDrawElements;
   PFNGLDRAWELEMENTSINSTANCEDPROC glDrawElementsInstanced;
+  PFNGLDRAWRANGEELEMENTSPROC glDrawRangeElements;
   PFNGLENABLEPROC glEnable;
   PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
   PFNGLENDQUERYPROC glEndQuery;
@@ -177,6 +187,9 @@ class EGLContextWrapper {
   PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
   PFNGLGETACTIVEATTRIBPROC glGetActiveAttrib;
   PFNGLGETACTIVEUNIFORMPROC glGetActiveUniform;
+  PFNGLGETACTIVEUNIFORMBLOCKIVPROC glGetActiveUniformBlockiv;
+  PFNGLGETACTIVEUNIFORMBLOCKNAMEPROC glGetActiveUniformBlockName;
+  PFNGLGETACTIVEUNIFORMSIVPROC glGetActiveUniformsiv;
   PFNGLGETATTACHEDSHADERSPROC glGetAttachedShaders;
   PFNGLGETATTRIBLOCATIONPROC glGetAttribLocation;
   PFNGLGETBUFFERPARAMETERIVPROC glGetBufferParameteriv;
@@ -198,14 +211,23 @@ class EGLContextWrapper {
   PFNGLGETSHADERIVPROC glGetShaderiv;
   PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
   PFNGLGETSHADERPRECISIONFORMATPROC glGetShaderPrecisionFormat;
+  PFNGLGETSHADERSOURCEPROC glGetShaderSource;
   PFNGLGETSTRINGPROC glGetString;
   PFNGLGETSYNCIVPROC glGetSynciv;
   PFNGLGETTEXPARAMETERFVPROC glGetTexParameterfv;
   PFNGLGETTEXPARAMETERIVPROC glGetTexParameteriv;
   PFNGLGETTRANSFORMFEEDBACKVARYINGPROC glGetTransformFeedbackVarying;
+  PFNGLGETUNIFORMFVPROC glGetUniformfv;
+  PFNGLGETUNIFORMIVPROC glGetUniformiv;
+  PFNGLGETUNIFORMUIVPROC glGetUniformuiv;
+  PFNGLGETUNIFORMBLOCKINDEXPROC glGetUniformBlockIndex;
+  PFNGLGETUNIFORMINDICESPROC glGetUniformIndices;
   PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
+  PFNGLGETVERTEXATTRIBFVPROC glGetVertexAttribfv;
   PFNGLGETVERTEXATTRIBIIVPROC glGetVertexAttribIiv;
   PFNGLGETVERTEXATTRIBIUIVPROC glGetVertexAttribIuiv;
+  PFNGLGETVERTEXATTRIBIVPROC glGetVertexAttribiv;
+  PFNGLGETVERTEXATTRIBPOINTERVPROC glGetVertexAttribPointerv;
   PFNGLHINTPROC glHint;
   PFNGLISBUFFERPROC glIsBuffer;
   PFNGLISENABLEDPROC glIsEnabled;
@@ -224,12 +246,14 @@ class EGLContextWrapper {
   PFNGLLINEWIDTHPROC glLineWidth;
   PFNGLLINKPROGRAMPROC glLinkProgram;
   PFNGLMAPBUFFERRANGEPROC glMapBufferRange;
+  PFNGLPAUSETRANSFORMFEEDBACKPROC glPauseTransformFeedback;
   PFNGLPIXELSTOREIPROC glPixelStorei;
   PFNGLPOLYGONOFFSETPROC glPolygonOffset;
   PFNGLREADPIXELSPROC glReadPixels;
   PFNGLREADBUFFERPROC glReadBuffer;
   PFNGLRENDERBUFFERSTORAGEPROC glRenderbufferStorage;
   PFNGLRENDERBUFFERSTORAGEMULTISAMPLEPROC glRenderbufferStorageMultisample;
+  PFNGLRESUMETRANSFORMFEEDBACKPROC glResumeTransformFeedback;
   PFNGLSAMPLECOVERAGEPROC glSampleCoverage;
   PFNGLSAMPLERPARAMETERFPROC glSamplerParameterf;
   PFNGLSAMPLERPARAMETERIPROC glSamplerParameteri;
@@ -245,6 +269,8 @@ class EGLContextWrapper {
   PFNGLTEXIMAGE3DPROC glTexImage3D;
   PFNGLTEXPARAMETERIPROC glTexParameteri;
   PFNGLTEXPARAMETERFPROC glTexParameterf;
+  PFNGLTEXSTORAGE2DPROC glTexStorage2D;
+  PFNGLTEXSTORAGE3DPROC glTexStorage3D;
   PFNGLTEXSUBIMAGE2DPROC glTexSubImage2D;
   PFNGLTEXSUBIMAGE3DPROC glTexSubImage3D;
   PFNGLTRANSFORMFEEDBACKVARYINGSPROC glTransformFeedbackVaryings;
@@ -272,6 +298,7 @@ class EGLContextWrapper {
   PFNGLUNIFORM4IVPROC glUniform4iv;
   PFNGLUNIFORM4UIPROC glUniform4ui;
   PFNGLUNIFORM4UIVPROC glUniform4uiv;
+  PFNGLUNIFORMBLOCKBINDINGPROC glUniformBlockBinding;
   PFNGLUNIFORMMATRIX2FVPROC glUniformMatrix2fv;
   PFNGLUNIFORMMATRIX2X3FVPROC glUniformMatrix2x3fv;
   PFNGLUNIFORMMATRIX2X4FVPROC glUniformMatrix2x4fv;
