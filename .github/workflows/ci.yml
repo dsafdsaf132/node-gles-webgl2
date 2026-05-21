@@ -20,7 +20,7 @@ jobs:
           node-version: 20
 
       - name: Install native build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libx11-dev
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev xvfb
 
       - name: Install dependencies
         run: npm install --ignore-scripts
@@ -33,7 +33,7 @@ jobs:
 
       - name: Smoke test WebGL2 bindings
         run: |
-          node <<'NODE'
+          xvfb-run -a node <<'NODE'
           const nodeGles = require(".");
           const gl = nodeGles.createWebGLRenderingContext({
             width: 8,

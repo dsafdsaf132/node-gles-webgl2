@@ -19,8 +19,6 @@ const cp = require('child_process');
 const fs = require('fs');
 const https = require('https');
 const path = require('path');
-const rimraf = require('rimraf');
-const tar = require('tar');
 const util = require('util');
 const os = require('os');
 const url = require('url');
@@ -59,6 +57,22 @@ const depsPath = path.join(__dirname, '..', 'deps');
 async function ensureDir(dirPath) {
   if (!await exists(dirPath)) {
     await mkdir(dirPath);
+  }
+}
+
+function assertSafeTarEntries(tempFileName) {
+  const listing = cp.execFileSync('tar', ['-tzf', tempFileName], {
+    encoding: 'utf8'
+  });
+
+  const entries = listing.split(/\r?\n/).filter(Boolean);
+  for (const entry of entries) {
+    const normalized = path.posix.normalize(entry);
+    if (path.posix.isAbsolute(entry) || normalized === '..' ||
+        normalized.startsWith('../') ||
+        (normalized !== 'angle' && !normalized.startsWith('angle/'))) {
+      throw new Error(`Unexpected ANGLE archive entry: ${entry}`);
+    }
   }
 }
 
@@ -127,13 +141,23 @@ async function downloadAngleLibs(callback) {
           });
     } else {
       // All other platforms use a tarball:
+      const tempFileName =
+          path.join(__dirname, `_tmp-angle-${process.pid}.tar.gz`);
+      const outputFile = fs.createWriteStream(tempFileName);
+
       response
           .on('data',
               (chunk) => {
                 bar.tick(chunk.length);
               })
-          .pipe(tar.x({C: depsPath, strict: true}))
-          .on('close', () => {
+          .pipe(outputFile)
+          .on('close', async () => {
+            assertSafeTarEntries(tempFileName);
+            cp.execFileSync(
+                'tar', ['-xzf', tempFileName, '-C', depsPath],
+                {stdio: 'inherit'});
+            await unlink(tempFileName);
+
             if (callback !== undefined) {
               callback();
             }
