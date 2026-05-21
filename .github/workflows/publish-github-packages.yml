@@ -1,0 +1,44 @@
+name: Publish to GitHub Packages
+
+on:
+  release:
+    types:
+      - published
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://npm.pkg.github.com
+          scope: "@dsafdsaf132"
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Build package files
+        run: npm run build
+
+      - name: Prepare GitHub Packages metadata
+        run: |
+          npm pkg set name=@dsafdsaf132/node-gles-webgl2
+          npm pkg set publishConfig.registry=https://npm.pkg.github.com
+
+      - name: Verify package contents
+        run: npm pack --dry-run
+
+      - name: Publish
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
