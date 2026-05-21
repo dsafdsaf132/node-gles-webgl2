@@ -3,17 +3,16 @@
 `node-gles-webgl2` is a fork of `node-gles` focused on exposing missing
 WebGL2 / OpenGL ES 3 APIs from the JavaScript WebGL context.
 
-The immediate goal is to run the `wasm-gerber-viewer` WASM renderer in a
-headless Node.js GLES context. The upstream project already creates an ANGLE
-OpenGL ES 3.0 runtime, but many GLES3 entry points were not surfaced as
-browser-compatible WebGL2 method names. This fork fills that gap.
+The upstream project already creates an ANGLE OpenGL ES runtime for headless
+Node.js rendering. This fork keeps that behavior and surfaces GLES3 entry
+points through browser-compatible WebGL2 method names.
 
 ## Scope
 
 This fork keeps the existing WebGL1 API behavior and adds native GLES-backed
 WebGL2 methods where ANGLE exposes the underlying entry points.
 
-Primary renderer path:
+Core WebGL2 entry points:
 
 ```js
 gl.createVertexArray();
@@ -129,23 +128,8 @@ Run the TypeScript and native addon checks:
 npx --yes node-gyp rebuild
 ```
 
-Run the `wasm-gerber-viewer` renderer smoke test with this checkout:
-
-```sh
-GERBER_RENDERER_GLES_MODULE=/path/to/node-gles-webgl2 \
-node /path/to/wasm-gerber-viewer/packages/gerber-renderer/bin/gerber-renderer.js \
-  /path/to/wasm-gerber-viewer/demo/font-test.gbr \
-  -o /tmp/font-test-node-gles.png \
-  --width 800 --height 500 --background '#05070c' --padding 24
-```
-
-Expected result:
-
-- `/tmp/font-test-node-gles.png` is created.
-- The PNG has non-background pixels.
-
 ## Notes
 
-This fork is intentionally pragmatic. It prioritizes the APIs needed by
-`wasm-gerber-viewer` and then exposes nearby WebGL2/GLES3 APIs that can be
-bound directly to ANGLE without JavaScript emulation.
+This fork is intentionally pragmatic. It preserves the existing WebGL1 surface
+from `node-gles` and adds WebGL2/GLES3 APIs that can be bound directly to ANGLE
+without JavaScript emulation.
