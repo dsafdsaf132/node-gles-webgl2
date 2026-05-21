@@ -45,10 +45,18 @@ enum NodeJSGLArrayType {
 class ArrayLikeBuffer {
 public:
   ArrayLikeBuffer()
-      : data(nullptr), length(0), should_delete(false), array_type(kFloat32) {}
+      : data(nullptr),
+        length(0),
+        element_size(sizeof(float)),
+        should_delete(false),
+        array_type(kFloat32) {}
 
   ArrayLikeBuffer(NodeJSGLArrayType array_type)
-      : data(nullptr), length(0), should_delete(false), array_type(array_type) {
+      : data(nullptr),
+        length(0),
+        element_size(ArrayTypeElementSize(array_type)),
+        should_delete(false),
+        array_type(array_type) {
   }
 
   ~ArrayLikeBuffer() {
@@ -58,25 +66,34 @@ public:
   }
 
   size_t size() {
-    switch (array_type) {
-    case kInt32:
-      return length / sizeof(int32_t);
-    case kFloat32:
-      return length / sizeof(float);
-    case kUint32:
-      return length / sizeof(uint32_t);
-    default:
+    if (element_size == 0) {
       fprintf(stderr,
               "WARNING: Cannot determine size of unknown array buffer type\n");
       return 0;
     }
+    return length / element_size;
   }
 
   void *data;
   size_t length;
+  size_t element_size;
   bool should_delete;
 
   NodeJSGLArrayType array_type;
+
+private:
+  static size_t ArrayTypeElementSize(NodeJSGLArrayType array_type) {
+    switch (array_type) {
+    case kInt32:
+      return sizeof(int32_t);
+    case kFloat32:
+      return sizeof(float);
+    case kUint32:
+      return sizeof(uint32_t);
+    default:
+      return 0;
+    }
+  }
 };
 
 bool WebGLRenderingContext::CheckForErrors() {
@@ -463,6 +480,37 @@ static bool IsUnsignedIntUniformType(GLenum type) {
   }
 }
 
+static bool GetBufferBindingEnum(GLenum target, GLenum *binding_enum) {
+  switch (target) {
+  case GL_ARRAY_BUFFER:
+    *binding_enum = GL_ARRAY_BUFFER_BINDING;
+    return true;
+  case GL_ELEMENT_ARRAY_BUFFER:
+    *binding_enum = GL_ELEMENT_ARRAY_BUFFER_BINDING;
+    return true;
+  case GL_COPY_READ_BUFFER:
+    *binding_enum = GL_COPY_READ_BUFFER_BINDING;
+    return true;
+  case GL_COPY_WRITE_BUFFER:
+    *binding_enum = GL_COPY_WRITE_BUFFER_BINDING;
+    return true;
+  case GL_PIXEL_PACK_BUFFER:
+    *binding_enum = GL_PIXEL_PACK_BUFFER_BINDING;
+    return true;
+  case GL_PIXEL_UNPACK_BUFFER:
+    *binding_enum = GL_PIXEL_UNPACK_BUFFER_BINDING;
+    return true;
+  case GL_TRANSFORM_FEEDBACK_BUFFER:
+    *binding_enum = GL_TRANSFORM_FEEDBACK_BUFFER_BINDING;
+    return true;
+  case GL_UNIFORM_BUFFER:
+    *binding_enum = GL_UNIFORM_BUFFER_BINDING;
+    return true;
+  default:
+    return false;
+  }
+}
+
 static napi_status GetUint32AllowNull(napi_env env, napi_value value,
                                       GLuint *result) {
   napi_status nstatus;
@@ -550,7 +598,8 @@ static napi_status GetArrayLikeBuffer(napi_env env, napi_value array_like_value,
                                        &arraybuffer_value, nullptr);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-    alb->length = element_count * TypedArrayElementSize(array_type);
+    alb->element_size = TypedArrayElementSize(array_type);
+    alb->length = element_count * alb->element_size;
 
     return napi_ok;
   }
@@ -568,14 +617,17 @@ static napi_status GetArrayLikeBuffer(napi_env env, napi_value array_like_value,
     case kFloat32:
       alb->data = malloc(sizeof(float) * length);
       alb->length = sizeof(float) * length;
+      alb->element_size = sizeof(float);
       break;
     case kInt32:
       alb->data = malloc(sizeof(int32_t) * length);
       alb->length = sizeof(int32_t) * length;
+      alb->element_size = sizeof(int32_t);
       break;
     case kUint32:
       alb->data = malloc(sizeof(uint32_t) * length);
       alb->length = sizeof(uint32_t) * length;
+      alb->element_size = sizeof(uint32_t);
       break;
     default:
       NAPI_THROW_ERROR(env, "Unsupported array type for generic arrays!");
@@ -4996,13 +5048,15 @@ napi_value WebGLRenderingContext::GetBufferSubData(napi_env env,
                                                    napi_callback_info info) {
   napi_status nstatus;
 
-  // TODO(kreeger): This method requires 3 - but takes upto 5 args.
-  size_t argc = 3;
-  napi_value args[3];
+  size_t argc = 5;
+  napi_value args[5];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 3, nullptr);
+  if (argc < 3) {
+    NAPI_THROW_ERROR(env, "getBufferSubData expects at least 3 arguments");
+    return nullptr;
+  }
 
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
@@ -5020,16 +5074,75 @@ napi_value WebGLRenderingContext::GetBufferSubData(napi_env env,
   nstatus = GetArrayLikeBuffer(env, args[2], &alb);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  uint32_t dst_offset = 0;
+  if (argc >= 4) {
+    napi_valuetype value_type;
+    nstatus = napi_typeof(env, args[3], &value_type);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    if (value_type != napi_undefined) {
+      ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[3], nullptr);
+      nstatus = napi_get_value_uint32(env, args[3], &dst_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+  }
+
+  size_t element_count = alb.size();
+  if (dst_offset > element_count) {
+    NAPI_THROW_ERROR(env, "getBufferSubData dstOffset is out of range");
+    return nullptr;
+  }
+
+  size_t copy_element_count = element_count - dst_offset;
+  if (argc >= 5) {
+    napi_valuetype value_type;
+    nstatus = napi_typeof(env, args[4], &value_type);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    if (value_type != napi_undefined) {
+      uint32_t length;
+      ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[4], nullptr);
+      nstatus = napi_get_value_uint32(env, args[4], &length);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      copy_element_count = length;
+    }
+  }
+
+  if (copy_element_count > element_count - dst_offset) {
+    NAPI_THROW_ERROR(env, "getBufferSubData length is out of range");
+    return nullptr;
+  }
+
+  size_t copy_byte_count = copy_element_count * alb.element_size;
+  uint8_t *dst =
+      static_cast<uint8_t *>(alb.data) + dst_offset * alb.element_size;
+  if (copy_byte_count == 0) {
+    return nullptr;
+  }
+
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_GL_PROC_RETVAL(env, context, glMapBufferRange, nullptr);
+  ENSURE_GL_PROC_RETVAL(env, context, glUnmapBuffer, nullptr);
+
+  GLenum binding_enum;
+  if (GetBufferBindingEnum(target, &binding_enum)) {
+    GLint bound_buffer = 0;
+    context->eglContextWrapper_->glGetIntegerv(binding_enum, &bound_buffer);
+    if (bound_buffer == 0) {
+      return nullptr;
+    }
+  }
 
   void *buffer = context->eglContextWrapper_->glMapBufferRange(
-      target, offset, alb.length, GL_MAP_READ_BIT);
+      target, offset, static_cast<GLsizeiptr>(copy_byte_count), GL_MAP_READ_BIT);
 #if DEBUG
   context->CheckForErrors();
 #endif
-  memcpy(alb.data, buffer, alb.length);
+  if (buffer == nullptr) {
+    return nullptr;
+  }
+
+  memcpy(dst, buffer, copy_byte_count);
 
   context->eglContextWrapper_->glUnmapBuffer(target);
 #if DEBUG

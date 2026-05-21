@@ -34,7 +34,7 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
 
 export interface NodeJsGlBinding {
   createWebGLRenderingContext(
-    width: number, 
+    width: number,
     height: number,
     client_major_es_version: number,
     client_minor_es_version: number,
