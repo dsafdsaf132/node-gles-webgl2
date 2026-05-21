@@ -1,28 +1,38 @@
-# How to Contribute
+# Contributing
 
-We'd love to accept your patches and contributions to this project. There are
-just a few small guidelines you need to follow.
+Contributions are welcome through GitHub issues and pull requests.
 
-## Contributor License Agreement
+## Development
 
-Contributions to this project must be accompanied by a Contributor License
-Agreement. You (or your employer) retain the copyright to your contribution;
-this simply gives us permission to use and redistribute your contributions as
-part of the project. Head over to <https://cla.developers.google.com/> to see
-your current agreements on file or to sign a new one.
+Install dependencies without running the native install script:
 
-You generally only need to submit a CLA once, so if you've already submitted one
-(even if it was for a different project), you probably don't need to do it
-again.
+```sh
+npm install --ignore-scripts
+```
 
-## Code reviews
+Build the JavaScript package files:
 
-All submissions, including submissions by project members, require review. We
-use GitHub pull requests for this purpose. Consult
-[GitHub Help](https://help.github.com/articles/about-pull-requests/) for more
-information on using pull requests.
+```sh
+npm run build
+```
 
-## Community Guidelines
+Build the ANGLE-backed native addon:
 
-This project follows
-[Google's Open Source Community Guidelines](https://opensource.google.com/conduct/).
+```sh
+node scripts/install.js
+```
+
+On Ubuntu, install the native build dependencies first:
+
+```sh
+sudo apt-get install -y build-essential python3 libx11-dev
+```
+
+## Pull Requests
+
+- Keep changes focused and avoid unrelated refactors.
+- Update documentation when behavior or install steps change.
+- Run the relevant build checks before opening a pull request.
+
+By contributing, you agree that your contribution is licensed under the
+Apache-2.0 license used by this project.
