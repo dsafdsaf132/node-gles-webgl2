@@ -24,12 +24,13 @@
     "dist/index.js",
     "dist/version.d.ts",
     "dist/version.js",
+    "scripts/clean-dist.js",
     "scripts/install.js",
     "LICENSE",
     "README.md"
   ],
   "scripts": {
-    "build": "rimraf dist/ && tsc --sourceMap false",
+    "build": "node scripts/clean-dist.js && tsc --sourceMap false",
     "build-npm": "./scripts/build-npm.sh",
     "ci": "npm run build && npx --yes node-gyp rebuild",
     "format": "clang-format -i -style=Google binding/*.cc binding/*.h",
@@ -40,11 +41,7 @@
     "@types/node": "^10.9.4",
     "@types/progress": "^2.0.3",
     "@types/webgl2": "^0.0.4",
-    "clang-format": "^1.2.4",
-    "rimraf": "^2.6.2",
-    "ts-node": "^7.0.1",
-    "typescript": "^3.0.3",
-    "yalc": "^1.0.0-pre.27"
+    "typescript": "3.0.3"
   },
   "dependencies": {
     "adm-zip": "^0.4.13",

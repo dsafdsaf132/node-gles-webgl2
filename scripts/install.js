@@ -21,7 +21,7 @@ const https = require('https');
 const path = require('path');
 const util = require('util');
 const os = require('os');
-const url = require('url');
+const URL = require('url').URL;
 const zip = require('adm-zip');
 const HttpsProxyAgent = require('https-proxy-agent');
 const ProgressBar = require('progress');
@@ -88,12 +88,12 @@ async function downloadAngleLibs(callback) {
   const proxy = process.env['HTTPS_PROXY'] || process.env['https_proxy'] ||
       process.env['HTTP_PROXY'] || process.env['http_proxy'] || '';
 
-  // Using object destructuring to construct the options object for the
-  // http request.  the '...url.parse(ANGLE_BINARY_URI)' part fills in the host,
-  // path, protocol, etc from the ANGLE_BINARY_URI and then we set the agent to
-  // the default agent which is overridden a few lines down if there is a proxy
+  const angleUri = new URL(ANGLE_BINARY_URI);
   const options = {
-    ...url.parse(ANGLE_BINARY_URI),
+    protocol: angleUri.protocol,
+    hostname: angleUri.hostname,
+    port: angleUri.port,
+    path: `${angleUri.pathname}${angleUri.search}`,
     agent: https.globalAgent,
     headers: {'Cache-Control': 'no-cache'}
   };

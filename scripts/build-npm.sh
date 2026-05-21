@@ -16,7 +16,7 @@
 
 set -e
 
-rimraf dist/
+node scripts/clean-dist.js
 yarn
 tsc --sourceMap false
 npm pack
