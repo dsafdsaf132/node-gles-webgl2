@@ -44,9 +44,19 @@ class WebGLRenderingContext {
   static napi_value AttachShader(napi_env env, napi_callback_info info);
   static napi_value BindAttribLocation(napi_env env, napi_callback_info info);
   static napi_value BindBuffer(napi_env env, napi_callback_info info);
+  static napi_value BindBufferBase(napi_env env, napi_callback_info info);
+  static napi_value BindBufferRange(napi_env env, napi_callback_info info);
   static napi_value BindFramebuffer(napi_env env, napi_callback_info info);
   static napi_value BindRenderbuffer(napi_env env, napi_callback_info info);
+  static napi_value BindSampler(napi_env env, napi_callback_info info);
   static napi_value BindTexture(napi_env env, napi_callback_info info);
+  static napi_value BindTransformFeedback(napi_env env,
+                                          napi_callback_info info);
+  static napi_value BindVertexArray(napi_env env, napi_callback_info info);
+  static napi_value BeginQuery(napi_env env, napi_callback_info info);
+  static napi_value BeginTransformFeedback(napi_env env,
+                                           napi_callback_info info);
+  static napi_value BlitFramebuffer(napi_env env, napi_callback_info info);
   static napi_value BlendColor(napi_env env, napi_callback_info info);
   static napi_value BlendEquation(napi_env env, napi_callback_info info);
   static napi_value BlendEquationSeparate(napi_env env,
@@ -65,23 +75,39 @@ class WebGLRenderingContext {
   static napi_value ColorMask(napi_env env, napi_callback_info info);
   static napi_value CompileShader(napi_env env, napi_callback_info info);
   static napi_value CompressedTexImage2D(napi_env env, napi_callback_info info);
+  static napi_value CompressedTexImage3D(napi_env env, napi_callback_info info);
   static napi_value CompressedTexSubImage2D(napi_env env,
                                             napi_callback_info info);
+  static napi_value CompressedTexSubImage3D(napi_env env,
+                                            napi_callback_info info);
+  static napi_value CopyBufferSubData(napi_env env, napi_callback_info info);
   static napi_value CopyTexImage2D(napi_env env, napi_callback_info info);
   static napi_value CopyTexSubImage2D(napi_env env, napi_callback_info info);
+  static napi_value CopyTexSubImage3D(napi_env env, napi_callback_info info);
   static napi_value CreateBuffer(napi_env env, napi_callback_info info);
   static napi_value CreateFramebuffer(napi_env env, napi_callback_info info);
   static napi_value CreateProgram(napi_env env, napi_callback_info info);
+  static napi_value CreateQuery(napi_env env, napi_callback_info info);
   static napi_value CreateRenderbuffer(napi_env env, napi_callback_info info);
+  static napi_value CreateSampler(napi_env env, napi_callback_info info);
   static napi_value CreateShader(napi_env env, napi_callback_info info);
   static napi_value CreateTexture(napi_env env, napi_callback_info info);
+  static napi_value CreateTransformFeedback(napi_env env,
+                                            napi_callback_info info);
+  static napi_value CreateVertexArray(napi_env env, napi_callback_info info);
   static napi_value CullFace(napi_env env, napi_callback_info info);
   static napi_value DeleteBuffer(napi_env env, napi_callback_info info);
   static napi_value DeleteFramebuffer(napi_env env, napi_callback_info info);
   static napi_value DeleteProgram(napi_env env, napi_callback_info info);
+  static napi_value DeleteQuery(napi_env env, napi_callback_info info);
   static napi_value DeleteRenderbuffer(napi_env env, napi_callback_info info);
+  static napi_value DeleteSampler(napi_env env, napi_callback_info info);
   static napi_value DeleteShader(napi_env env, napi_callback_info info);
+  static napi_value DeleteSync(napi_env env, napi_callback_info info);
   static napi_value DeleteTexture(napi_env env, napi_callback_info info);
+  static napi_value DeleteTransformFeedback(napi_env env,
+                                            napi_callback_info info);
+  static napi_value DeleteVertexArray(napi_env env, napi_callback_info info);
   static napi_value DepthFunc(napi_env env, napi_callback_info info);
   static napi_value DepthMask(napi_env env, napi_callback_info info);
   static napi_value DepthRange(napi_env env, napi_callback_info info);
@@ -90,10 +116,16 @@ class WebGLRenderingContext {
   static napi_value DisableVertexAttribArray(napi_env env,
                                              napi_callback_info info);
   static napi_value DrawArrays(napi_env env, napi_callback_info info);
+  static napi_value DrawArraysInstanced(napi_env env, napi_callback_info info);
+  static napi_value DrawBuffers(napi_env env, napi_callback_info info);
   static napi_value DrawElements(napi_env env, napi_callback_info info);
+  static napi_value DrawElementsInstanced(napi_env env,
+                                          napi_callback_info info);
   static napi_value Enable(napi_env env, napi_callback_info info);
   static napi_value EnableVertexAttribArray(napi_env env,
                                             napi_callback_info info);
+  static napi_value EndQuery(napi_env env, napi_callback_info info);
+  static napi_value EndTransformFeedback(napi_env env, napi_callback_info info);
   static napi_value FenceSynce(napi_env env, napi_callback_info info);
   // TODO(kreeger): Check alignment in CC file here
   static napi_value Finish(napi_env env, napi_callback_info info);
@@ -101,6 +133,8 @@ class WebGLRenderingContext {
   static napi_value FramebufferRenderbuffer(napi_env env,
                                             napi_callback_info info);
   static napi_value FramebufferTexture2D(napi_env env, napi_callback_info info);
+  static napi_value FramebufferTextureLayer(napi_env env,
+                                            napi_callback_info info);
   static napi_value FrontFace(napi_env env, napi_callback_info info);
   static napi_value GenerateMipmap(napi_env env, napi_callback_info info);
   static napi_value GetAttachedShaders(napi_env env, napi_callback_info info);
@@ -113,36 +147,62 @@ class WebGLRenderingContext {
   static napi_value GetError(napi_env env, napi_callback_info info);
   static napi_value GetFramebufferAttachmentParameter(napi_env env,
                                                       napi_callback_info info);
+  static napi_value GetFragDataLocation(napi_env env, napi_callback_info info);
+  static napi_value GetIndexedParameter(napi_env env, napi_callback_info info);
+  static napi_value GetInternalformatParameter(napi_env env,
+                                               napi_callback_info info);
   static napi_value GetExtension(napi_env env, napi_callback_info info);
   static napi_value GetParameter(napi_env env, napi_callback_info info);
   static napi_value GetProgramInfoLog(napi_env env, napi_callback_info info);
   static napi_value GetProgramParameter(napi_env env, napi_callback_info info);
+  static napi_value GetQuery(napi_env env, napi_callback_info info);
+  static napi_value GetQueryParameter(napi_env env, napi_callback_info info);
   static napi_value GetRenderbufferParameter(napi_env env,
                                              napi_callback_info info);
+  static napi_value GetSamplerParameter(napi_env env, napi_callback_info info);
   static napi_value GetShaderPrecisionFormat(napi_env env,
                                              napi_callback_info info);
   static napi_value GetShaderInfoLog(napi_env env, napi_callback_info info);
   static napi_value GetShaderParameter(napi_env env, napi_callback_info info);
+  static napi_value GetSyncParameter(napi_env env, napi_callback_info info);
   static napi_value GetSupportedExtensions(napi_env env,
                                            napi_callback_info info);
   static napi_value GetTexParameter(napi_env env, napi_callback_info info);
+  static napi_value GetTransformFeedbackVarying(napi_env env,
+                                                napi_callback_info info);
   static napi_value GetUniformLocation(napi_env env, napi_callback_info info);
+  static napi_value GetVertexAttribIiv(napi_env env, napi_callback_info info);
+  static napi_value GetVertexAttribIuiv(napi_env env, napi_callback_info info);
   static napi_value Hint(napi_env env, napi_callback_info info);
   static napi_value IsBuffer(napi_env env, napi_callback_info info);
   static napi_value IsContextLost(napi_env env, napi_callback_info info);
   static napi_value IsEnabled(napi_env env, napi_callback_info info);
   static napi_value IsFramebuffer(napi_env env, napi_callback_info info);
   static napi_value IsProgram(napi_env env, napi_callback_info info);
+  static napi_value IsQuery(napi_env env, napi_callback_info info);
   static napi_value IsRenderbuffer(napi_env env, napi_callback_info info);
+  static napi_value IsSampler(napi_env env, napi_callback_info info);
   static napi_value IsShader(napi_env env, napi_callback_info info);
+  static napi_value IsSync(napi_env env, napi_callback_info info);
   static napi_value IsTexture(napi_env env, napi_callback_info info);
+  static napi_value IsTransformFeedback(napi_env env, napi_callback_info info);
+  static napi_value IsVertexArray(napi_env env, napi_callback_info info);
+  static napi_value InvalidateFramebuffer(napi_env env,
+                                          napi_callback_info info);
+  static napi_value InvalidateSubFramebuffer(napi_env env,
+                                             napi_callback_info info);
   static napi_value LineWidth(napi_env env, napi_callback_info info);
   static napi_value LinkProgram(napi_env env, napi_callback_info info);
   static napi_value PixelStorei(napi_env env, napi_callback_info info);
   static napi_value PolygonOffset(napi_env env, napi_callback_info info);
   static napi_value ReadPixels(napi_env env, napi_callback_info info);
+  static napi_value ReadBuffer(napi_env env, napi_callback_info info);
   static napi_value RenderbufferStorage(napi_env env, napi_callback_info info);
+  static napi_value RenderbufferStorageMultisample(napi_env env,
+                                                   napi_callback_info info);
   static napi_value SampleCoverage(napi_env env, napi_callback_info info);
+  static napi_value SamplerParameterf(napi_env env, napi_callback_info info);
+  static napi_value SamplerParameteri(napi_env env, napi_callback_info info);
   static napi_value Scissor(napi_env env, napi_callback_info info);
   static napi_value ShaderSource(napi_env env, napi_callback_info info);
   static napi_value StencilFunc(napi_env env, napi_callback_info info);
@@ -152,28 +212,46 @@ class WebGLRenderingContext {
   static napi_value StencilOp(napi_env env, napi_callback_info info);
   static napi_value StencilOpSeparate(napi_env env, napi_callback_info info);
   static napi_value TexImage2D(napi_env env, napi_callback_info info);
+  static napi_value TexImage3D(napi_env env, napi_callback_info info);
   static napi_value TexParameteri(napi_env env, napi_callback_info info);
   static napi_value TexParameterf(napi_env env, napi_callback_info info);
   static napi_value TexSubImage2D(napi_env env, napi_callback_info info);
+  static napi_value TexSubImage3D(napi_env env, napi_callback_info info);
+  static napi_value TransformFeedbackVaryings(napi_env env,
+                                              napi_callback_info info);
   static napi_value Uniform1i(napi_env env, napi_callback_info info);
   static napi_value Uniform1iv(napi_env env, napi_callback_info info);
+  static napi_value Uniform1ui(napi_env env, napi_callback_info info);
+  static napi_value Uniform1uiv(napi_env env, napi_callback_info info);
   static napi_value Uniform1f(napi_env env, napi_callback_info info);
   static napi_value Uniform1fv(napi_env env, napi_callback_info info);
   static napi_value Uniform2i(napi_env env, napi_callback_info info);
   static napi_value Uniform2f(napi_env env, napi_callback_info info);
   static napi_value Uniform2fv(napi_env env, napi_callback_info info);
   static napi_value Uniform2iv(napi_env env, napi_callback_info info);
+  static napi_value Uniform2ui(napi_env env, napi_callback_info info);
+  static napi_value Uniform2uiv(napi_env env, napi_callback_info info);
   static napi_value Uniform3i(napi_env env, napi_callback_info info);
   static napi_value Uniform3iv(napi_env env, napi_callback_info info);
   static napi_value Uniform3f(napi_env env, napi_callback_info info);
   static napi_value Uniform3fv(napi_env env, napi_callback_info info);
+  static napi_value Uniform3ui(napi_env env, napi_callback_info info);
+  static napi_value Uniform3uiv(napi_env env, napi_callback_info info);
   static napi_value Uniform4fv(napi_env env, napi_callback_info info);
   static napi_value Uniform4i(napi_env env, napi_callback_info info);
   static napi_value Uniform4iv(napi_env env, napi_callback_info info);
   static napi_value Uniform4f(napi_env env, napi_callback_info info);
+  static napi_value Uniform4ui(napi_env env, napi_callback_info info);
+  static napi_value Uniform4uiv(napi_env env, napi_callback_info info);
   static napi_value UniformMatrix2fv(napi_env env, napi_callback_info info);
+  static napi_value UniformMatrix2x3fv(napi_env env, napi_callback_info info);
+  static napi_value UniformMatrix2x4fv(napi_env env, napi_callback_info info);
   static napi_value UniformMatrix3fv(napi_env env, napi_callback_info info);
+  static napi_value UniformMatrix3x2fv(napi_env env, napi_callback_info info);
+  static napi_value UniformMatrix3x4fv(napi_env env, napi_callback_info info);
   static napi_value UniformMatrix4fv(napi_env env, napi_callback_info info);
+  static napi_value UniformMatrix4x2fv(napi_env env, napi_callback_info info);
+  static napi_value UniformMatrix4x3fv(napi_env env, napi_callback_info info);
   static napi_value UseProgram(napi_env env, napi_callback_info info);
   static napi_value ValidateProgram(napi_env env, napi_callback_info info);
   static napi_value VertexAttrib1f(napi_env env, napi_callback_info info);
@@ -184,8 +262,15 @@ class WebGLRenderingContext {
   static napi_value VertexAttrib3fv(napi_env env, napi_callback_info info);
   static napi_value VertexAttrib4f(napi_env env, napi_callback_info info);
   static napi_value VertexAttrib4fv(napi_env env, napi_callback_info info);
+  static napi_value VertexAttribDivisor(napi_env env, napi_callback_info info);
+  static napi_value VertexAttribI4i(napi_env env, napi_callback_info info);
+  static napi_value VertexAttribI4iv(napi_env env, napi_callback_info info);
+  static napi_value VertexAttribI4ui(napi_env env, napi_callback_info info);
+  static napi_value VertexAttribI4uiv(napi_env env, napi_callback_info info);
+  static napi_value VertexAttribIPointer(napi_env env, napi_callback_info info);
   static napi_value VertexAttribPointer(napi_env env, napi_callback_info info);
   static napi_value Viewport(napi_env env, napi_callback_info info);
+  static napi_value WaitSync(napi_env env, napi_callback_info info);
 
   static napi_ref constructor_ref_;
 

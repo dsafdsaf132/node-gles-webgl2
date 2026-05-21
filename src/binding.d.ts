@@ -15,6 +15,19 @@
  * =============================================================================
  */
 
+export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
+  createVertexArray(): WebGLVertexArrayObject | number | null;
+  bindVertexArray(vertexArray: WebGLVertexArrayObject | number | null): void;
+  deleteVertexArray(vertexArray: WebGLVertexArrayObject | number | null): void;
+  isVertexArray(vertexArray: WebGLVertexArrayObject | number | null): boolean;
+  drawArraysInstanced(
+    mode: number, first: number, count: number, instanceCount: number): void;
+  drawElementsInstanced(
+    mode: number, count: number, type: number, offset: number,
+    instanceCount: number): void;
+  vertexAttribDivisor(index: number, divisor: number): void;
+};
+
 export interface NodeJsGlBinding {
   createWebGLRenderingContext(
     width: number, 
@@ -22,5 +35,5 @@ export interface NodeJsGlBinding {
     client_major_es_version: number,
     client_minor_es_version: number,
     webgl_compatbility: boolean
-    ): WebGLRenderingContext | WebGL2RenderingContext;
+    ): WebGLRenderingContext | NodeGlesWebGL2RenderingContext;
 }

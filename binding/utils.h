@@ -252,7 +252,7 @@ class AutoBuffer {
 
   ~AutoBuffer() {
     if (buffer) {
-      delete buffer;
+      delete[] buffer;
     }
   }
 
