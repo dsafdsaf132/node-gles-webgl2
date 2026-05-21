@@ -58,7 +58,7 @@ that wasm-bindgen generated browser glue can call this context directly.
 ## Creating a Context
 
 ```js
-const nodeGles = require("node-gles");
+const nodeGles = require("node-gles-webgl2");
 
 const gl = nodeGles.createWebGLRenderingContext({
   width: 800,

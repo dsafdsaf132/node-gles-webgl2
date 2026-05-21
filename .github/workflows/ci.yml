@@ -1,0 +1,63 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - master
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Download ANGLE and build addon
+        run: node scripts/install.js
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Smoke test WebGL2 bindings
+        run: |
+          node <<'NODE'
+          const nodeGles = require(".");
+          const gl = nodeGles.createWebGLRenderingContext({
+            width: 8,
+            height: 8,
+            majorVersion: 3,
+            minorVersion: 0
+          });
+
+          const required = [
+            "createVertexArray",
+            "bindVertexArray",
+            "deleteVertexArray",
+            "drawArraysInstanced",
+            "drawElementsInstanced",
+            "vertexAttribDivisor"
+          ];
+          const missing = required.filter((name) => typeof gl[name] !== "function");
+          if (missing.length > 0) {
+            throw new Error(`Missing WebGL2 bindings: ${missing.join(", ")}`);
+          }
+
+          const vao = gl.createVertexArray();
+          gl.bindVertexArray(null);
+          gl.bindVertexArray(vao);
+          gl.deleteVertexArray(vao);
+          const error = gl.getError();
+          if (error !== gl.NO_ERROR) {
+            throw new Error(`Unexpected GL error: ${error}`);
+          }
+          NODE

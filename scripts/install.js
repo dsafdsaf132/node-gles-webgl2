@@ -149,11 +149,12 @@ async function downloadAngleLibs(callback) {
 //
 async function buildBindings() {
   console.error('* Building ANGLE bindings')
-  cp.execSync('node-gyp rebuild', (err) => {
-    if (err) {
-      throw new Error('node-gyp failed with: ' + err);
-    }
-  });
+  try {
+    cp.execSync('node-gyp rebuild', {stdio: 'inherit'});
+  } catch (err) {
+    console.error('* node-gyp failed, retrying with npx node-gyp');
+    cp.execSync('npx --yes node-gyp rebuild', {stdio: 'inherit'});
+  }
 }
 
 //
