@@ -253,6 +253,17 @@ inline napi_property_descriptor NapiDefineUintProperty(napi_env env,
           nullptr, js_value, napi_default, nullptr};
 }
 
+inline napi_property_descriptor NapiDefineDoubleProperty(napi_env env,
+                                                         double value,
+                                                         const char* name) {
+  napi_value js_value;
+  napi_status nstatus = napi_create_double(env, value, &js_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, {});
+
+  return {name,    nullptr,  nullptr,      nullptr,
+          nullptr, js_value, napi_default, nullptr};
+}
+
 namespace nodejsgl {
 
 // Auto-class for alloc'ing and deleting heap allocations.
