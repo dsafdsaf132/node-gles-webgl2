@@ -7873,6 +7873,9 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
     nstatus = GetArrayLikeBufferView(env, args[9], src_offset, false, 0,
                                      "srcData", &alb, &data, &byte_length);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  } else if (argc == 11) {
+    NAPI_THROW_ERROR(env, "texImage3D srcOffset requires ArrayBufferView data");
+    return nullptr;
   }
 
   ENSURE_GL_PROC_RETVAL(env, context, glTexImage3D, nullptr);
