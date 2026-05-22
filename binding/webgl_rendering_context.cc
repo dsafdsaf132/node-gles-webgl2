@@ -860,6 +860,217 @@ static napi_status GetPixelBufferOffsetPointer(napi_env env,
   return napi_ok;
 }
 
+static bool CheckedAdd(size_t a, size_t b, size_t *result) {
+  if (a > std::numeric_limits<size_t>::max() - b) {
+    return false;
+  }
+  *result = a + b;
+  return true;
+}
+
+static bool CheckedMultiply(size_t a, size_t b, size_t *result) {
+  if (a != 0 && b > std::numeric_limits<size_t>::max() / a) {
+    return false;
+  }
+  *result = a * b;
+  return true;
+}
+
+static size_t AlignByteCount(size_t value, GLint alignment) {
+  const size_t align = alignment > 0 ? static_cast<size_t>(alignment) : 1;
+  const size_t remainder = value % align;
+  return remainder == 0 ? value : value + align - remainder;
+}
+
+static bool GetPixelComponentCount(GLenum format, size_t *components) {
+  switch (format) {
+  case GL_ALPHA:
+  case GL_LUMINANCE:
+  case GL_RED:
+  case GL_RED_INTEGER:
+  case GL_DEPTH_COMPONENT:
+    *components = 1;
+    return true;
+  case GL_LUMINANCE_ALPHA:
+  case GL_RG:
+  case GL_RG_INTEGER:
+    *components = 2;
+    return true;
+  case GL_RGB:
+  case GL_RGB_INTEGER:
+    *components = 3;
+    return true;
+  case GL_RGBA:
+  case GL_RGBA_INTEGER:
+    *components = 4;
+    return true;
+  case GL_DEPTH_STENCIL:
+    *components = 1;
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool GetPixelTypeBytes(GLenum type, size_t *bytes_per_component,
+                              bool *is_packed) {
+  *is_packed = false;
+  switch (type) {
+  case GL_UNSIGNED_BYTE:
+  case GL_BYTE:
+    *bytes_per_component = 1;
+    return true;
+  case GL_UNSIGNED_SHORT:
+  case GL_SHORT:
+  case GL_HALF_FLOAT:
+  case GL_UNSIGNED_SHORT_5_6_5:
+  case GL_UNSIGNED_SHORT_4_4_4_4:
+  case GL_UNSIGNED_SHORT_5_5_5_1:
+    *bytes_per_component = 2;
+    *is_packed = type == GL_UNSIGNED_SHORT_5_6_5 ||
+                 type == GL_UNSIGNED_SHORT_4_4_4_4 ||
+                 type == GL_UNSIGNED_SHORT_5_5_5_1;
+    return true;
+  case GL_UNSIGNED_INT:
+  case GL_INT:
+  case GL_FLOAT:
+  case GL_UNSIGNED_INT_2_10_10_10_REV:
+  case GL_UNSIGNED_INT_10F_11F_11F_REV:
+  case GL_UNSIGNED_INT_5_9_9_9_REV:
+  case GL_UNSIGNED_INT_24_8:
+    *bytes_per_component = 4;
+    *is_packed = type == GL_UNSIGNED_INT_2_10_10_10_REV ||
+                 type == GL_UNSIGNED_INT_10F_11F_11F_REV ||
+                 type == GL_UNSIGNED_INT_5_9_9_9_REV ||
+                 type == GL_UNSIGNED_INT_24_8;
+    return true;
+  case GL_FLOAT_32_UNSIGNED_INT_24_8_REV:
+    *bytes_per_component = 8;
+    *is_packed = true;
+    return true;
+  default:
+    return false;
+  }
+}
+
+static bool GetPixelBytesPerPixel(GLenum format, GLenum type,
+                                  size_t *bytes_per_pixel) {
+  size_t components = 0;
+  if (!GetPixelComponentCount(format, &components)) {
+    return false;
+  }
+
+  size_t bytes_per_component = 0;
+  bool is_packed = false;
+  if (!GetPixelTypeBytes(type, &bytes_per_component, &is_packed)) {
+    return false;
+  }
+
+  if (is_packed) {
+    *bytes_per_pixel = bytes_per_component;
+    return true;
+  }
+  return CheckedMultiply(components, bytes_per_component, bytes_per_pixel);
+}
+
+static GLint GetPixelStoreInteger(EGLContextWrapper *wrapper, GLenum pname,
+                                  GLint fallback) {
+  GLint value = fallback;
+  wrapper->glGetIntegerv(pname, &value);
+  return value;
+}
+
+static napi_status GetRequiredPixelDataByteCount(
+    napi_env env, EGLContextWrapper *wrapper, bool pack, GLsizei width,
+    GLsizei height, GLsizei depth, GLenum format, GLenum type,
+    size_t *required_byte_count) {
+  *required_byte_count = 0;
+  if (width <= 0 || height <= 0 || depth <= 0) {
+    return napi_ok;
+  }
+
+  size_t bytes_per_pixel = 0;
+  if (!GetPixelBytesPerPixel(format, type, &bytes_per_pixel)) {
+    return napi_ok;
+  }
+
+  const GLint alignment = GetPixelStoreInteger(
+      wrapper, pack ? GL_PACK_ALIGNMENT : GL_UNPACK_ALIGNMENT, 4);
+  const GLint row_length = GetPixelStoreInteger(
+      wrapper, pack ? GL_PACK_ROW_LENGTH : GL_UNPACK_ROW_LENGTH, 0);
+  const GLint skip_rows = GetPixelStoreInteger(
+      wrapper, pack ? GL_PACK_SKIP_ROWS : GL_UNPACK_SKIP_ROWS, 0);
+  const GLint skip_pixels = GetPixelStoreInteger(
+      wrapper, pack ? GL_PACK_SKIP_PIXELS : GL_UNPACK_SKIP_PIXELS, 0);
+  const GLint image_height =
+      pack ? 0 : GetPixelStoreInteger(wrapper, GL_UNPACK_IMAGE_HEIGHT, 0);
+  const GLint skip_images =
+      pack ? 0 : GetPixelStoreInteger(wrapper, GL_UNPACK_SKIP_IMAGES, 0);
+
+  const size_t row_pixels = static_cast<size_t>(
+      row_length > 0 ? row_length : static_cast<GLint>(width));
+  const size_t image_rows = static_cast<size_t>(
+      image_height > 0 ? image_height : static_cast<GLint>(height));
+  const size_t safe_skip_rows =
+      skip_rows > 0 ? static_cast<size_t>(skip_rows) : 0;
+  const size_t safe_skip_pixels =
+      skip_pixels > 0 ? static_cast<size_t>(skip_pixels) : 0;
+  const size_t safe_skip_images =
+      skip_images > 0 ? static_cast<size_t>(skip_images) : 0;
+
+  size_t source_row_bytes = 0;
+  if (!CheckedMultiply(row_pixels, bytes_per_pixel, &source_row_bytes)) {
+    NAPI_THROW_ERROR(env, "pixel data size is too large");
+    return napi_invalid_arg;
+  }
+  const size_t row_stride = AlignByteCount(source_row_bytes, alignment);
+
+  size_t image_stride = 0;
+  if (!CheckedMultiply(image_rows, row_stride, &image_stride)) {
+    NAPI_THROW_ERROR(env, "pixel data size is too large");
+    return napi_invalid_arg;
+  }
+
+  size_t required = 0;
+  size_t term = 0;
+  if (!CheckedMultiply(safe_skip_images, image_stride, &required) ||
+      !CheckedMultiply(safe_skip_rows, row_stride, &term) ||
+      !CheckedAdd(required, term, &required) ||
+      !CheckedMultiply(safe_skip_pixels, bytes_per_pixel, &term) ||
+      !CheckedAdd(required, term, &required) ||
+      !CheckedMultiply(static_cast<size_t>(depth - 1), image_stride, &term) ||
+      !CheckedAdd(required, term, &required) ||
+      !CheckedMultiply(static_cast<size_t>(height - 1), row_stride, &term) ||
+      !CheckedAdd(required, term, &required) ||
+      !CheckedMultiply(static_cast<size_t>(width), bytes_per_pixel, &term) ||
+      !CheckedAdd(required, term, &required)) {
+    NAPI_THROW_ERROR(env, "pixel data size is too large");
+    return napi_invalid_arg;
+  }
+
+  *required_byte_count = required;
+  return napi_ok;
+}
+
+static napi_status ValidatePixelDataCapacity(
+    napi_env env, EGLContextWrapper *wrapper, bool pack, GLsizei width,
+    GLsizei height, GLsizei depth, GLenum format, GLenum type,
+    size_t available_byte_count, const char *name) {
+  size_t required_byte_count = 0;
+  napi_status nstatus = GetRequiredPixelDataByteCount(
+      env, wrapper, pack, width, height, depth, format, type,
+      &required_byte_count);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (required_byte_count > available_byte_count) {
+    std::string message =
+        std::string(name) + " is too small for requested pixel data";
+    NAPI_THROW_ERROR(env, message.c_str());
+    return napi_invalid_arg;
+  }
+  return napi_ok;
+}
+
 napi_ref WebGLRenderingContext::constructor_ref_;
 
 WebGLRenderingContext::WebGLRenderingContext(napi_env env,
@@ -7419,6 +7630,10 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
     nstatus = GetArrayLikeBufferView(env, args[6], dst_offset, false, 0,
                                      "pixels", &alb, &view_data, &byte_length);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = ValidatePixelDataCapacity(
+        env, context->eglContextWrapper_, true, width, height, 1, format, type,
+        static_cast<size_t>(byte_length), "pixels");
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     data = const_cast<void *>(view_data);
   }
 
@@ -7872,6 +8087,10 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
     GLsizei byte_length = 0;
     nstatus = GetArrayLikeBufferView(env, args[9], src_offset, false, 0,
                                      "srcData", &alb, &data, &byte_length);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = ValidatePixelDataCapacity(
+        env, context->eglContextWrapper_, false, width, height, depth, format,
+        type, static_cast<size_t>(byte_length), "srcData");
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   } else if (argc == 11) {
     NAPI_THROW_ERROR(env, "texImage3D srcOffset requires ArrayBufferView data");
@@ -8355,6 +8574,10 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
     GLsizei byte_length = 0;
     nstatus = GetArrayLikeBufferView(env, args[10], src_offset, false, 0,
                                      "srcData", &alb, &data, &byte_length);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = ValidatePixelDataCapacity(
+        env, context->eglContextWrapper_, false, width, height, depth, format,
+        type, static_cast<size_t>(byte_length), "srcData");
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   }
 
