@@ -29,12 +29,13 @@ namespace nodejsgl {
 struct GLSyncHandle {
   GLsync sync;
   EGLContextWrapper *egl_context_wrapper;
+  napi_ref context_ref;
 };
 
 // Creates and wraps a JS object with a GLsync instance.
 napi_status WrapGLsync(napi_env env, GLsync &sync,
                        EGLContextWrapper *egl_context_wrapper,
-                       napi_value *wrapped_value);
+                       napi_value context_value, napi_value *wrapped_value);
 
 }  // namespace nodejsgl
 

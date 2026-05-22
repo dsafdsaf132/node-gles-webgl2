@@ -41,6 +41,38 @@ export type NodeGlesOESVertexArrayObject = {
 export type NodeGlesWEBGLDrawBuffers = {
   readonly MAX_DRAW_BUFFERS_WEBGL: number;
   readonly MAX_COLOR_ATTACHMENTS_WEBGL: number;
+  readonly COLOR_ATTACHMENT0_WEBGL: number;
+  readonly COLOR_ATTACHMENT1_WEBGL: number;
+  readonly COLOR_ATTACHMENT2_WEBGL: number;
+  readonly COLOR_ATTACHMENT3_WEBGL: number;
+  readonly COLOR_ATTACHMENT4_WEBGL: number;
+  readonly COLOR_ATTACHMENT5_WEBGL: number;
+  readonly COLOR_ATTACHMENT6_WEBGL: number;
+  readonly COLOR_ATTACHMENT7_WEBGL: number;
+  readonly COLOR_ATTACHMENT8_WEBGL: number;
+  readonly COLOR_ATTACHMENT9_WEBGL: number;
+  readonly COLOR_ATTACHMENT10_WEBGL: number;
+  readonly COLOR_ATTACHMENT11_WEBGL: number;
+  readonly COLOR_ATTACHMENT12_WEBGL: number;
+  readonly COLOR_ATTACHMENT13_WEBGL: number;
+  readonly COLOR_ATTACHMENT14_WEBGL: number;
+  readonly COLOR_ATTACHMENT15_WEBGL: number;
+  readonly DRAW_BUFFER0_WEBGL: number;
+  readonly DRAW_BUFFER1_WEBGL: number;
+  readonly DRAW_BUFFER2_WEBGL: number;
+  readonly DRAW_BUFFER3_WEBGL: number;
+  readonly DRAW_BUFFER4_WEBGL: number;
+  readonly DRAW_BUFFER5_WEBGL: number;
+  readonly DRAW_BUFFER6_WEBGL: number;
+  readonly DRAW_BUFFER7_WEBGL: number;
+  readonly DRAW_BUFFER8_WEBGL: number;
+  readonly DRAW_BUFFER9_WEBGL: number;
+  readonly DRAW_BUFFER10_WEBGL: number;
+  readonly DRAW_BUFFER11_WEBGL: number;
+  readonly DRAW_BUFFER12_WEBGL: number;
+  readonly DRAW_BUFFER13_WEBGL: number;
+  readonly DRAW_BUFFER14_WEBGL: number;
+  readonly DRAW_BUFFER15_WEBGL: number;
   drawBuffersWEBGL(buffers: number[] | Uint32Array): void;
 };
 

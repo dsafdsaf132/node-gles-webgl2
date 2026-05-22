@@ -777,6 +777,24 @@ static napi_status GetOptionalArrayOffsetParam(napi_env env, napi_value value,
   return GetNonNegativeIntegerParam<uint32_t>(env, value, name, result);
 }
 
+static napi_status GetOptionalArrayLengthParam(napi_env env, napi_value value,
+                                               const char *name,
+                                               uint32_t *result,
+                                               bool *has_value) {
+  napi_valuetype value_type;
+  napi_status nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  if (value_type == napi_undefined || value_type == napi_null) {
+    *result = 0;
+    *has_value = false;
+    return napi_ok;
+  }
+  nstatus = GetNonNegativeIntegerParam<uint32_t>(env, value, name, result);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  *has_value = true;
+  return napi_ok;
+}
+
 static napi_status GetArrayLikeBufferView(napi_env env, napi_value value,
                                           uint32_t element_offset,
                                           bool has_length_override,
@@ -2958,10 +2976,9 @@ WebGLRenderingContext::CompressedTexImage2D(napi_env env,
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     }
     if (argc >= 9) {
-      nstatus = GetOptionalArrayOffsetParam(env, args[8], "srcLengthOverride",
-                                            &src_length);
+      nstatus = GetOptionalArrayLengthParam(env, args[8], "srcLengthOverride",
+                                            &src_length, &has_src_length);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-      has_src_length = true;
     }
     nstatus = GetArrayLikeBufferView(env, args[6], src_offset, has_src_length,
                                      src_length, "srcData", &alb, &data,
@@ -3055,10 +3072,9 @@ WebGLRenderingContext::CompressedTexImage3D(napi_env env,
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     }
     if (argc >= 10) {
-      nstatus = GetOptionalArrayOffsetParam(env, args[9], "srcLengthOverride",
-                                            &src_length);
+      nstatus = GetOptionalArrayLengthParam(env, args[9], "srcLengthOverride",
+                                            &src_length, &has_src_length);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-      has_src_length = true;
     }
     nstatus = GetArrayLikeBufferView(env, args[7], src_offset, has_src_length,
                                      src_length, "srcData", &alb, &data,
@@ -3167,10 +3183,9 @@ WebGLRenderingContext::CompressedTexSubImage2D(napi_env env,
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     }
     if (argc >= 10) {
-      nstatus = GetOptionalArrayOffsetParam(env, args[9], "srcLengthOverride",
-                                            &src_length);
+      nstatus = GetOptionalArrayLengthParam(env, args[9], "srcLengthOverride",
+                                            &src_length, &has_src_length);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-      has_src_length = true;
     }
     nstatus = GetArrayLikeBufferView(env, args[7], src_offset, has_src_length,
                                      src_length, "srcData", &alb, &data,
@@ -3272,10 +3287,9 @@ WebGLRenderingContext::CompressedTexSubImage3D(napi_env env,
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     }
     if (argc >= 12) {
-      nstatus = GetOptionalArrayOffsetParam(env, args[11], "srcLengthOverride",
-                                            &src_length);
+      nstatus = GetOptionalArrayLengthParam(env, args[11], "srcLengthOverride",
+                                            &src_length, &has_src_length);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-      has_src_length = true;
     }
     nstatus = GetArrayLikeBufferView(env, args[9], src_offset, has_src_length,
                                      src_length, "srcData", &alb, &data,
@@ -3909,10 +3923,14 @@ napi_value WebGLRenderingContext::DeleteSync(napi_env env,
   if (handle != nullptr && handle->sync != nullptr) {
     context->eglContextWrapper_->glDeleteSync(handle->sync);
     handle->sync = nullptr;
-    void *removed = nullptr;
-    napi_remove_wrap(env, args[0], &removed);
-    delete static_cast<GLSyncHandle *>(removed);
   }
+  if (handle != nullptr && handle->context_ref != nullptr) {
+    napi_delete_reference(env, handle->context_ref);
+    handle->context_ref = nullptr;
+  }
+  void *removed = nullptr;
+  napi_remove_wrap(env, args[0], &removed);
+  delete static_cast<GLSyncHandle *>(removed);
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -4480,10 +4498,24 @@ napi_value WebGLRenderingContext::FenceSynce(napi_env env,
                                              napi_callback_info info) {
   LOG_CALL("FenceSync");
 
+  napi_status nstatus;
+  size_t argc = 2;
+  napi_value js_args[2];
+  napi_value js_this;
+  nstatus = napi_get_cb_info(env, info, &argc, js_args, &js_this, nullptr);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
+  ENSURE_VALUE_IS_NUMBER_RETVAL(env, js_args[0], nullptr);
+  ENSURE_VALUE_IS_NUMBER_RETVAL(env, js_args[1], nullptr);
+
   WebGLRenderingContext *context = nullptr;
+  nstatus = UnwrapContext(env, js_this, &context);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   uint32_t args[2];
-  napi_status nstatus = GetContextUint32Params(env, info, &context, 2, args);
+  nstatus = napi_get_value_uint32(env, js_args[0], &args[0]);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus = napi_get_value_uint32(env, js_args[1], &args[1]);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glFenceSync, nullptr);
 
@@ -4496,7 +4528,8 @@ napi_value WebGLRenderingContext::FenceSynce(napi_env env,
   }
 
   napi_value sync_value;
-  nstatus = WrapGLsync(env, sync, context->eglContextWrapper_, &sync_value);
+  nstatus = WrapGLsync(env, sync, context->eglContextWrapper_, js_this,
+                       &sync_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
 #if DEBUG

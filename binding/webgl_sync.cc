@@ -20,24 +20,47 @@
 
 namespace nodejsgl {
 
+static void ReleaseGLSyncHandle(napi_env env, GLSyncHandle* handle,
+                                bool delete_sync) {
+  if (handle == nullptr) {
+    return;
+  }
+  if (delete_sync && handle->sync != nullptr &&
+      handle->egl_context_wrapper != nullptr &&
+      handle->egl_context_wrapper->glDeleteSync != nullptr) {
+    handle->egl_context_wrapper->glDeleteSync(handle->sync);
+  }
+  handle->sync = nullptr;
+  if (handle->context_ref != nullptr) {
+    napi_delete_reference(env, handle->context_ref);
+    handle->context_ref = nullptr;
+  }
+  delete handle;
+}
+
 void Cleanup(napi_env env, void* native, void* hint) {
   GLSyncHandle* handle = static_cast<GLSyncHandle*>(native);
-  delete handle;
+  ReleaseGLSyncHandle(env, handle, true);
 }
 
 napi_status WrapGLsync(napi_env env, GLsync& sync,
                        EGLContextWrapper* egl_context_wrapper,
-                       napi_value* wrapped_value) {
+                       napi_value context_value, napi_value* wrapped_value) {
   napi_status nstatus;
 
   nstatus = napi_create_object(env, wrapped_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-  GLSyncHandle* handle = new GLSyncHandle{sync, egl_context_wrapper};
+  napi_ref context_ref = nullptr;
+  nstatus = napi_create_reference(env, context_value, 1, &context_ref);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  GLSyncHandle* handle =
+      new GLSyncHandle{sync, egl_context_wrapper, context_ref};
   nstatus = napi_wrap(env, *wrapped_value, handle, Cleanup, nullptr,
                       nullptr);
   if (nstatus != napi_ok) {
-    delete handle;
+    ReleaseGLSyncHandle(env, handle, false);
   }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
