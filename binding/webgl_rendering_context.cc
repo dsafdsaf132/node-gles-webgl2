@@ -299,10 +299,21 @@ static napi_status GetContextDoubleParams(napi_env env, napi_callback_info info,
 template <typename T>
 static napi_status GetNonNegativeIntegerParam(napi_env env, napi_value value,
                                               const char *name, T *result) {
+  napi_valuetype value_type;
+  napi_status nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  // Match the existing numeric argument path used by the WebGL bindings:
+  // nullable numeric parameters are coerced to zero before reaching GLES.
+  if (value_type == napi_null || value_type == napi_undefined) {
+    *result = 0;
+    return napi_ok;
+  }
+
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, value, napi_invalid_arg);
 
   double number;
-  napi_status nstatus = napi_get_value_double(env, value, &number);
+  nstatus = napi_get_value_double(env, value, &number);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
   const double upper_exclusive =
