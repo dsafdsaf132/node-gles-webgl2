@@ -54,8 +54,20 @@ jobs:
 
           git fetch --tags origin
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
-            echo "::error::Git tag ${tag} already exists"
-            exit 1
+            tag_sha="$(git rev-list -n 1 "${tag}")"
+            head_sha="$(git rev-parse HEAD)"
+            if [ "${tag_sha}" != "${head_sha}" ]; then
+              echo "::error::Git tag ${tag} already exists at ${tag_sha}, not current HEAD ${head_sha}"
+              exit 1
+            fi
+            current_version="$(node -p "require('./package.json').version")"
+            if [ "${current_version}" != "${version}" ]; then
+              echo "::error::Git tag ${tag} exists at HEAD, but package.json is ${current_version}"
+              exit 1
+            fi
+            tag_exists=true
+          else
+            tag_exists=false
           fi
 
           if npm view "${package_name}@${version}" version >/dev/null 2>&1; then
@@ -65,31 +77,44 @@ jobs:
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=${tag_exists}" >> "$GITHUB_OUTPUT"
 
       - name: Commit release version
         shell: bash
         run: |
           set -euo pipefail
 
-          npm version "${{ steps.release.outputs.version }}" --no-git-tag-version
-
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          for lockfile in package-lock.json npm-shrinkwrap.json; do
-            if [ -f "$lockfile" ]; then
-              git add "$lockfile"
-            fi
-          done
 
-          if git diff --cached --quiet; then
-            echo "::error::No package version changes were produced"
-            exit 1
+          current_version="$(node -p "require('./package.json').version")"
+          if [ "${current_version}" != "${{ steps.release.outputs.version }}" ]; then
+            npm version "${{ steps.release.outputs.version }}" --no-git-tag-version
+
+            git add package.json
+            for lockfile in package-lock.json npm-shrinkwrap.json; do
+              if [ -f "$lockfile" ]; then
+                git add "$lockfile"
+              fi
+            done
+
+            if git diff --cached --quiet; then
+              echo "::error::No package version changes were produced"
+              exit 1
+            fi
+
+            git commit -m "chore(release): ${{ steps.release.outputs.tag }}"
+            git push origin "HEAD:${{ github.ref_name }}"
+          else
+            echo "package.json is already at ${{ steps.release.outputs.version }}"
           fi
 
-          git commit -m "chore(release): ${{ steps.release.outputs.tag }}"
-          git tag "${{ steps.release.outputs.tag }}"
-          git push origin "HEAD:${{ github.ref_name }}" "${{ steps.release.outputs.tag }}"
+          if [ "${{ steps.release.outputs.tag_exists }}" = "true" ]; then
+            echo "Git tag ${{ steps.release.outputs.tag }} already points at HEAD"
+          else
+            git tag "${{ steps.release.outputs.tag }}"
+            git push origin "${{ steps.release.outputs.tag }}"
+          fi
 
       - name: Install dependencies
         run: npm install --ignore-scripts
