@@ -3,8 +3,8 @@ name: Publish to npm
 on:
   workflow_dispatch:
     inputs:
-      tag:
-        description: "Git tag to publish, for example v0.1.3"
+      version:
+        description: "npm version to publish, for example 0.1.4 or v0.1.4"
         required: true
         type: string
 
@@ -12,20 +12,84 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       id-token: write
 
     steps:
       - name: Check out
         uses: actions/checkout@v4
         with:
-          ref: ${{ inputs.tag }}
+          ref: ${{ github.ref_name }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           registry-url: https://registry.npmjs.org
+
+      - name: Prepare release version
+        id: release
+        shell: bash
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+
+          if [ "${GITHUB_REF_NAME}" != "master" ]; then
+            echo "::error::Publish workflow must be run from master, got ${GITHUB_REF_NAME}"
+            exit 1
+          fi
+
+          version="${INPUT_VERSION}"
+          version="${version#v}"
+          tag="v${version}"
+
+          if ! node -e 'const version = process.argv[1]; if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/.test(version)) process.exit(1)' "$version"; then
+            echo "::error::Invalid semver version: ${INPUT_VERSION}"
+            exit 1
+          fi
+
+          package_name="$(node -p "require('./package.json').name")"
+
+          git fetch --tags origin
+          if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
+            echo "::error::Git tag ${tag} already exists"
+            exit 1
+          fi
+
+          if npm view "${package_name}@${version}" version >/dev/null 2>&1; then
+            echo "::error::${package_name}@${version} is already published"
+            exit 1
+          fi
+
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      - name: Commit release version
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          npm version "${{ steps.release.outputs.version }}" --no-git-tag-version
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          for lockfile in package-lock.json npm-shrinkwrap.json; do
+            if [ -f "$lockfile" ]; then
+              git add "$lockfile"
+            fi
+          done
+
+          if git diff --cached --quiet; then
+            echo "::error::No package version changes were produced"
+            exit 1
+          fi
+
+          git commit -m "chore(release): ${{ steps.release.outputs.tag }}"
+          git tag "${{ steps.release.outputs.tag }}"
+          git push origin "HEAD:${{ github.ref_name }}" "${{ steps.release.outputs.tag }}"
 
       - name: Install dependencies
         run: npm install --ignore-scripts
