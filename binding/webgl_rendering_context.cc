@@ -17,9 +17,11 @@
 
 #include "webgl_rendering_context.h"
 
+#include <cmath>
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -291,6 +293,85 @@ static napi_status GetContextDoubleParams(napi_env env, napi_callback_info info,
     }
   }
 
+  return napi_ok;
+}
+
+template <typename T>
+static napi_status GetNullableUint32Param(napi_env env, napi_value value,
+                                          T *result) {
+  napi_status nstatus;
+  napi_valuetype value_type;
+  nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (value_type == napi_null || value_type == napi_undefined) {
+    *result = 0;
+    return napi_ok;
+  }
+
+  ENSURE_VALUE_IS_NUMBER_RETVAL(env, value, napi_invalid_arg);
+
+  uint32_t parsed;
+  nstatus = napi_get_value_uint32(env, value, &parsed);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  *result = static_cast<T>(parsed);
+  return napi_ok;
+}
+
+template <typename T>
+static napi_status GetNonNegativeIntegerParam(napi_env env, napi_value value,
+                                              const char *name, T *result) {
+  napi_valuetype value_type;
+  napi_status nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  // Match the existing numeric argument path used by the WebGL bindings:
+  // nullable numeric parameters are coerced to zero before reaching GLES.
+  if (value_type == napi_null || value_type == napi_undefined) {
+    *result = 0;
+    return napi_ok;
+  }
+
+  ENSURE_VALUE_IS_NUMBER_RETVAL(env, value, napi_invalid_arg);
+
+  double number;
+  nstatus = napi_get_value_double(env, value, &number);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  const double upper_exclusive =
+      std::ldexp(1.0, std::numeric_limits<T>::digits);
+  if (!std::isfinite(number) || std::floor(number) != number || number < 0 ||
+      number >= upper_exclusive) {
+    std::string message = std::string(name) + " is out of range";
+    NAPI_THROW_ERROR(env, message.c_str());
+    return napi_invalid_arg;
+  }
+
+  *result = static_cast<T>(number);
+  return napi_ok;
+}
+
+static napi_status GetUint64TimeoutParam(napi_env env, napi_value value,
+                                         GLuint64 *result) {
+  ENSURE_VALUE_IS_NUMBER_RETVAL(env, value, napi_invalid_arg);
+
+  double number;
+  napi_status nstatus = napi_get_value_double(env, value, &number);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (number == -1) {
+    *result = GL_TIMEOUT_IGNORED;
+    return napi_ok;
+  }
+
+  if (!std::isfinite(number) || std::floor(number) != number || number < 0 ||
+      number >= std::ldexp(1.0, std::numeric_limits<GLuint64>::digits)) {
+    NAPI_THROW_ERROR(env, "sync timeout is out of range");
+    return napi_invalid_arg;
+  }
+
+  *result = static_cast<GLuint64>(number);
   return napi_ok;
 }
 
@@ -1355,6 +1436,7 @@ napi_status WebGLRenderingContext::Register(napi_env env, napi_value exports) {
       NapiDefineIntProperty(env, GL_SYNC_GPU_COMMANDS_COMPLETE,
                             "SYNC_GPU_COMMANDS_COMPLETE"),
       NapiDefineIntProperty(env, GL_TIMEOUT_EXPIRED, "TIMEOUT_EXPIRED"),
+      NapiDefineIntProperty(env, -1, "TIMEOUT_IGNORED"),
       NapiDefineIntProperty(env, GL_WAIT_FAILED, "WAIT_FAILED"),
       NapiDefineIntProperty(env, GL_SYNC_STATUS, "SYNC_STATUS"),
       NapiDefineIntProperty(env, GL_SYNC_CONDITION, "SYNC_CONDITION"),
@@ -1896,13 +1978,39 @@ napi_value WebGLRenderingContext::BindBufferBase(napi_env env,
 napi_value WebGLRenderingContext::BindBufferRange(napi_env env,
                                                   napi_callback_info info) {
   LOG_CALL("BindBufferRange");
+  napi_status nstatus;
+
+  size_t argc = 5;
+  napi_value args[5];
+  napi_value js_this;
+  nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_ARGC_RETVAL(env, argc, 5, nullptr);
+
+  GLenum target;
+  GLuint index;
+  GLuint buffer;
+  GLintptr offset;
+  GLsizeiptr size;
+  nstatus = GetNullableUint32Param(env, args[0], &target);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus = GetNullableUint32Param(env, args[1], &index);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus = GetNullableUint32Param(env, args[2], &buffer);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus = GetNonNegativeIntegerParam<GLintptr>(env, args[3], "offset",
+                                                 &offset);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus =
+      GetNonNegativeIntegerParam<GLsizeiptr>(env, args[4], "size", &size);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
   WebGLRenderingContext *context = nullptr;
-  uint32_t args[5];
-  napi_status nstatus = GetContextUint32Params(env, info, &context, 5, args);
+  nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glBindBufferRange, nullptr);
-  context->eglContextWrapper_->glBindBufferRange(args[0], args[1], args[2],
-                                                 args[3], args[4]);
+  context->eglContextWrapper_->glBindBufferRange(target, index, buffer, offset,
+                                                 size);
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -2190,15 +2298,21 @@ napi_value WebGLRenderingContext::BufferData(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb;
-  uint32_t length;
+  GLsizeiptr length;
   if (arg_type == napi_number) {
-    nstatus = napi_get_value_uint32(env, args[1], &length);
+    nstatus = GetNonNegativeIntegerParam<GLsizeiptr>(env, args[1], "size",
+                                                     &length);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   } else {
     nstatus = GetArrayLikeBuffer(env, args[1], &alb);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-    length = alb.length;
+    if (alb.length >
+        static_cast<size_t>(std::numeric_limits<GLsizeiptr>::max())) {
+      NAPI_THROW_ERROR(env, "buffer data size is out of range");
+      return nullptr;
+    }
+    length = static_cast<GLsizeiptr>(alb.length);
   }
 
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[2], nullptr);
@@ -2238,15 +2352,21 @@ napi_value WebGLRenderingContext::BufferSubData(napi_env env,
   nstatus = napi_get_value_uint32(env, args[0], &target);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  uint32_t offset;
-  nstatus = napi_get_value_uint32(env, args[1], &offset);
+  GLintptr offset;
+  nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, args[1], "offset", &offset);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb;
   nstatus = GetArrayLikeBuffer(env, args[2], &alb);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  context->eglContextWrapper_->glBufferSubData(target, offset, alb.length,
-                                               alb.data);
+  if (alb.length >
+      static_cast<size_t>(std::numeric_limits<GLsizeiptr>::max())) {
+    NAPI_THROW_ERROR(env, "buffer sub data size is out of range");
+    return nullptr;
+  }
+  context->eglContextWrapper_->glBufferSubData(
+      target, offset, static_cast<GLsizeiptr>(alb.length), alb.data);
 
 #if DEBUG
   context->CheckForErrors();
@@ -2610,14 +2730,14 @@ napi_value WebGLRenderingContext::ClientWaitSync(napi_env env,
   nstatus = napi_get_value_uint32(env, args[1], &flags);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  // TODO(kreeger): Note that N-API doesn't have uint64 support.
-  uint32_t timeout;
-  nstatus = napi_get_value_uint32(env, args[2], &timeout);
+  GLuint64 timeout;
+  nstatus = GetUint64TimeoutParam(env, args[2], &timeout);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_GL_PROC_RETVAL(env, context, glClientWaitSync, nullptr);
 
   GLenum result =
       context->eglContextWrapper_->glClientWaitSync(sync, flags, timeout);
@@ -2788,10 +2908,11 @@ WebGLRenderingContext::CompressedTexImage3D(napi_env env,
     image_size = static_cast<GLsizei>(alb.length);
     data = alb.data;
   } else {
-    uint32_t offset;
+    GLintptr offset;
     nstatus = napi_get_value_int32(env, args[7], &image_size);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    nstatus = napi_get_value_uint32(env, args[8], &offset);
+    nstatus =
+        GetNonNegativeIntegerParam<GLintptr>(env, args[8], "offset", &offset);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
   }
@@ -2937,10 +3058,11 @@ WebGLRenderingContext::CompressedTexSubImage3D(napi_env env,
     image_size = static_cast<GLsizei>(alb.length);
     data = alb.data;
   } else {
-    uint32_t offset;
+    GLintptr offset;
     nstatus = napi_get_value_int32(env, args[9], &image_size);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    nstatus = napi_get_value_uint32(env, args[10], &offset);
+    nstatus =
+        GetNonNegativeIntegerParam<GLintptr>(env, args[10], "offset", &offset);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
   }
@@ -2962,13 +3084,40 @@ WebGLRenderingContext::CompressedTexSubImage3D(napi_env env,
 napi_value WebGLRenderingContext::CopyBufferSubData(napi_env env,
                                                     napi_callback_info info) {
   LOG_CALL("CopyBufferSubData");
+  napi_status nstatus;
+
+  size_t argc = 5;
+  napi_value args[5];
+  napi_value js_this;
+  nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_ARGC_RETVAL(env, argc, 5, nullptr);
+
+  GLenum read_target;
+  GLenum write_target;
+  GLintptr read_offset;
+  GLintptr write_offset;
+  GLsizeiptr size;
+  nstatus = GetNullableUint32Param(env, args[0], &read_target);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus = GetNullableUint32Param(env, args[1], &write_target);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus = GetNonNegativeIntegerParam<GLintptr>(env, args[2], "readOffset",
+                                                 &read_offset);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus = GetNonNegativeIntegerParam<GLintptr>(env, args[3], "writeOffset",
+                                                 &write_offset);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  nstatus =
+      GetNonNegativeIntegerParam<GLsizeiptr>(env, args[4], "size", &size);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
   WebGLRenderingContext *context = nullptr;
-  uint32_t args[5];
-  napi_status nstatus = GetContextUint32Params(env, info, &context, 5, args);
+  nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glCopyBufferSubData, nullptr);
-  context->eglContextWrapper_->glCopyBufferSubData(args[0], args[1], args[2],
-                                                   args[3], args[4]);
+  context->eglContextWrapper_->glCopyBufferSubData(
+      read_target, write_target, read_offset, write_offset, size);
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -3919,12 +4068,14 @@ napi_value WebGLRenderingContext::DrawElements(napi_env env,
   nstatus = napi_get_value_uint32(env, args[2], &type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  uint32_t offset;
-  nstatus = napi_get_value_uint32(env, args[3], &offset);
+  GLintptr offset;
+  nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, args[3], "offset", &offset);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   context->eglContextWrapper_->glDrawElements(
-      mode, count, type, reinterpret_cast<GLvoid *>(offset));
+      mode, count, type,
+      reinterpret_cast<GLvoid *>(static_cast<uintptr_t>(offset)));
 
 #if DEBUG
   context->CheckForErrors();
@@ -3954,7 +4105,7 @@ WebGLRenderingContext::DrawElementsInstanced(napi_env env,
   GLenum mode;
   GLsizei count;
   GLenum type;
-  uint32_t offset;
+  GLintptr offset;
   GLsizei instance_count;
   nstatus = napi_get_value_uint32(env, args[0], &mode);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -3962,7 +4113,8 @@ WebGLRenderingContext::DrawElementsInstanced(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = napi_get_value_uint32(env, args[2], &type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  nstatus = napi_get_value_uint32(env, args[3], &offset);
+  nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, args[3], "offset", &offset);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = napi_get_value_int32(env, args[4], &instance_count);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -4003,7 +4155,7 @@ napi_value WebGLRenderingContext::DrawRangeElements(napi_env env,
   GLuint end;
   GLsizei count;
   GLenum type;
-  uint32_t offset;
+  GLintptr offset;
   nstatus = napi_get_value_uint32(env, args[0], &mode);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = napi_get_value_uint32(env, args[1], &start);
@@ -4014,7 +4166,8 @@ napi_value WebGLRenderingContext::DrawRangeElements(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = napi_get_value_uint32(env, args[4], &type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  nstatus = napi_get_value_uint32(env, args[5], &offset);
+  nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, args[5], "offset", &offset);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   WebGLRenderingContext *context = nullptr;
@@ -5065,9 +5218,10 @@ napi_value WebGLRenderingContext::GetBufferSubData(napi_env env,
   nstatus = napi_get_value_uint32(env, args[0], &target);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  // N-API does not support signed long ints:
-  uint32_t offset;
-  nstatus = napi_get_value_uint32(env, args[1], &offset);
+  GLintptr offset;
+  nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, args[1], "srcByteOffset",
+                                           &offset);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb;
@@ -5112,6 +5266,11 @@ napi_value WebGLRenderingContext::GetBufferSubData(napi_env env,
   }
 
   size_t copy_byte_count = copy_element_count * alb.element_size;
+  if (copy_byte_count >
+      static_cast<size_t>(std::numeric_limits<GLsizeiptr>::max())) {
+    NAPI_THROW_ERROR(env, "getBufferSubData length is out of range");
+    return nullptr;
+  }
   uint8_t *dst =
       static_cast<uint8_t *>(alb.data) + dst_offset * alb.element_size;
   if (copy_byte_count == 0) {
@@ -5558,6 +5717,10 @@ napi_value WebGLRenderingContext::GetSyncParameter(napi_env env,
   GLsync sync = nullptr;
   nstatus = GetSyncParam(env, args[0], &sync);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (sync == nullptr) {
+    NAPI_THROW_ERROR(env, "sync must not be null");
+    return nullptr;
+  }
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
   GLenum pname;
   nstatus = napi_get_value_uint32(env, args[1], &pname);
@@ -7248,8 +7411,9 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
   nstatus = napi_typeof(env, args[9], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (value_type == napi_number) {
-    uint32_t offset;
-    nstatus = napi_get_value_uint32(env, args[9], &offset);
+    GLintptr offset;
+    nstatus =
+        GetNonNegativeIntegerParam<GLintptr>(env, args[9], "offset", &offset);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
   } else if (value_type != napi_null) {
@@ -7712,8 +7876,9 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
   nstatus = napi_typeof(env, args[10], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (value_type == napi_number) {
-    uint32_t offset;
-    nstatus = napi_get_value_uint32(env, args[10], &offset);
+    GLintptr offset;
+    nstatus =
+        GetNonNegativeIntegerParam<GLintptr>(env, args[10], "offset", &offset);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
   } else {
@@ -9247,7 +9412,7 @@ WebGLRenderingContext::VertexAttribIPointer(napi_env env,
   GLint size;
   GLenum type;
   GLsizei stride;
-  uint32_t offset;
+  GLintptr offset;
   nstatus = napi_get_value_uint32(env, args[0], &index);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = napi_get_value_int32(env, args[1], &size);
@@ -9256,7 +9421,8 @@ WebGLRenderingContext::VertexAttribIPointer(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = napi_get_value_int32(env, args[3], &stride);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  nstatus = napi_get_value_uint32(env, args[4], &offset);
+  nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, args[4], "offset", &offset);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
@@ -9307,8 +9473,9 @@ napi_value WebGLRenderingContext::VertexAttribPointer(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[5], nullptr);
-  uint32_t offset;
-  nstatus = napi_get_value_uint32(env, args[5], &offset);
+  GLintptr offset;
+  nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, args[5], "offset", &offset);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   WebGLRenderingContext *context = nullptr;
@@ -9317,7 +9484,7 @@ napi_value WebGLRenderingContext::VertexAttribPointer(napi_env env,
 
   context->eglContextWrapper_->glVertexAttribPointer(
       index, size, type, normalized, stride,
-      reinterpret_cast<GLvoid *>(offset));
+      reinterpret_cast<GLvoid *>(static_cast<uintptr_t>(offset)));
 
 #if DEBUG
   context->CheckForErrors();
@@ -9341,13 +9508,16 @@ napi_value WebGLRenderingContext::WaitSync(napi_env env,
   nstatus = GetSyncParam(env, args[0], &sync);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[2], nullptr);
   GLbitfield flags;
-  uint32_t timeout;
+  GLuint64 timeout;
   nstatus = napi_get_value_uint32(env, args[1], &flags);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  nstatus = napi_get_value_uint32(env, args[2], &timeout);
+  nstatus = GetUint64TimeoutParam(env, args[2], &timeout);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (sync == nullptr) {
+    NAPI_THROW_ERROR(env, "sync must not be null");
+    return nullptr;
+  }
 
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
