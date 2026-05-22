@@ -305,8 +305,10 @@ static napi_status GetNonNegativeIntegerParam(napi_env env, napi_value value,
   napi_status nstatus = napi_get_value_double(env, value, &number);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-  if (!std::isfinite(number) || number < 0 ||
-      number > static_cast<double>(std::numeric_limits<T>::max())) {
+  const double upper_exclusive =
+      std::ldexp(1.0, std::numeric_limits<T>::digits);
+  if (!std::isfinite(number) || std::floor(number) != number || number < 0 ||
+      number >= upper_exclusive) {
     std::string message = std::string(name) + " is out of range";
     NAPI_THROW_ERROR(env, message.c_str());
     return napi_invalid_arg;
@@ -324,14 +326,13 @@ static napi_status GetUint64TimeoutParam(napi_env env, napi_value value,
   napi_status nstatus = napi_get_value_double(env, value, &number);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-  const double timeout_ignored = static_cast<double>(GL_TIMEOUT_IGNORED);
-  if (number == timeout_ignored) {
+  if (number == -1) {
     *result = GL_TIMEOUT_IGNORED;
     return napi_ok;
   }
 
-  if (!std::isfinite(number) || number < 0 ||
-      number > static_cast<double>(std::numeric_limits<GLuint64>::max())) {
+  if (!std::isfinite(number) || std::floor(number) != number || number < 0 ||
+      number >= std::ldexp(1.0, std::numeric_limits<GLuint64>::digits)) {
     NAPI_THROW_ERROR(env, "sync timeout is out of range");
     return napi_invalid_arg;
   }
@@ -1401,8 +1402,7 @@ napi_status WebGLRenderingContext::Register(napi_env env, napi_value exports) {
       NapiDefineIntProperty(env, GL_SYNC_GPU_COMMANDS_COMPLETE,
                             "SYNC_GPU_COMMANDS_COMPLETE"),
       NapiDefineIntProperty(env, GL_TIMEOUT_EXPIRED, "TIMEOUT_EXPIRED"),
-      NapiDefineDoubleProperty(env, static_cast<double>(GL_TIMEOUT_IGNORED),
-                               "TIMEOUT_IGNORED"),
+      NapiDefineIntProperty(env, -1, "TIMEOUT_IGNORED"),
       NapiDefineIntProperty(env, GL_WAIT_FAILED, "WAIT_FAILED"),
       NapiDefineIntProperty(env, GL_SYNC_STATUS, "SYNC_STATUS"),
       NapiDefineIntProperty(env, GL_SYNC_CONDITION, "SYNC_CONDITION"),
