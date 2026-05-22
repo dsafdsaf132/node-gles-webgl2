@@ -21,15 +21,8 @@
 namespace nodejsgl {
 
 void Cleanup(napi_env env, void* native, void* hint) {
-  GLsync sync = static_cast<GLsync>(native);
-  EGLContextWrapper* egl_context_wrapper =
-      static_cast<EGLContextWrapper*>(hint);
-
-  egl_context_wrapper->glDeleteSync(sync);
-#if DEBUG
-  // TODO(kreeger): Fix this.
-  /* context->CheckForErrors(); */
-#endif
+  GLSyncHandle* handle = static_cast<GLSyncHandle*>(native);
+  delete handle;
 }
 
 napi_status WrapGLsync(napi_env env, GLsync& sync,
@@ -40,8 +33,12 @@ napi_status WrapGLsync(napi_env env, GLsync& sync,
   nstatus = napi_create_object(env, wrapped_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-  nstatus = napi_wrap(env, *wrapped_value, sync, Cleanup, egl_context_wrapper,
+  GLSyncHandle* handle = new GLSyncHandle{sync, egl_context_wrapper};
+  nstatus = napi_wrap(env, *wrapped_value, handle, Cleanup, nullptr,
                       nullptr);
+  if (nstatus != napi_ok) {
+    delete handle;
+  }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
   return napi_ok;

@@ -619,8 +619,10 @@ static napi_status GetSyncParam(napi_env env, napi_value value,
     return napi_ok;
   }
   ENSURE_VALUE_IS_OBJECT_RETVAL(env, value, napi_invalid_arg);
-  nstatus = napi_unwrap(env, value, reinterpret_cast<void **>(result));
+  GLSyncHandle *handle = nullptr;
+  nstatus = napi_unwrap(env, value, reinterpret_cast<void **>(&handle));
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  *result = handle ? handle->sync : nullptr;
   return napi_ok;
 }
 
@@ -760,6 +762,84 @@ static napi_status GetArrayLikeBuffer(napi_env env, napi_value array_like_value,
 
   NAPI_THROW_ERROR(env, "Invalid data type.");
   return napi_invalid_arg;
+}
+
+static napi_status GetOptionalArrayOffsetParam(napi_env env, napi_value value,
+                                               const char *name,
+                                               uint32_t *result) {
+  napi_valuetype value_type;
+  napi_status nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  if (value_type == napi_undefined || value_type == napi_null) {
+    *result = 0;
+    return napi_ok;
+  }
+  return GetNonNegativeIntegerParam<uint32_t>(env, value, name, result);
+}
+
+static napi_status GetArrayLikeBufferView(napi_env env, napi_value value,
+                                          uint32_t element_offset,
+                                          bool has_length_override,
+                                          uint32_t length_override,
+                                          const char *name,
+                                          ArrayLikeBuffer *alb,
+                                          const void **data,
+                                          GLsizei *byte_length) {
+  napi_status nstatus = GetArrayLikeBuffer(env, value, alb);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  const size_t element_count = alb->size();
+  if (element_offset > element_count) {
+    std::string message = std::string(name) + " offset is out of range";
+    NAPI_THROW_ERROR(env, message.c_str());
+    return napi_invalid_arg;
+  }
+
+  size_t copy_element_count = element_count - element_offset;
+  if (has_length_override) {
+    if (length_override > copy_element_count) {
+      std::string message = std::string(name) + " length is out of range";
+      NAPI_THROW_ERROR(env, message.c_str());
+      return napi_invalid_arg;
+    }
+    copy_element_count = length_override;
+  }
+
+  const size_t copy_byte_count = copy_element_count * alb->element_size;
+  if (copy_byte_count >
+      static_cast<size_t>(std::numeric_limits<GLsizei>::max())) {
+    std::string message = std::string(name) + " length is out of range";
+    NAPI_THROW_ERROR(env, message.c_str());
+    return napi_invalid_arg;
+  }
+
+  *data = static_cast<const uint8_t *>(alb->data) +
+          element_offset * alb->element_size;
+  *byte_length = static_cast<GLsizei>(copy_byte_count);
+  return napi_ok;
+}
+
+static napi_status GetPixelBufferOffsetPointer(napi_env env,
+                                               EGLContextWrapper *wrapper,
+                                               GLenum binding_enum,
+                                               napi_value value,
+                                               const char *name,
+                                               const void **data) {
+  GLint bound_buffer = 0;
+  wrapper->glGetIntegerv(binding_enum, &bound_buffer);
+  if (bound_buffer == 0) {
+    std::string message =
+        std::string(name) + " requires a pixel buffer binding";
+    NAPI_THROW_ERROR(env, message.c_str());
+    return napi_invalid_arg;
+  }
+
+  GLintptr offset;
+  napi_status nstatus =
+      GetNonNegativeIntegerParam<GLintptr>(env, value, name, &offset);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  *data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
+  return napi_ok;
 }
 
 napi_ref WebGLRenderingContext::constructor_ref_;
@@ -2718,13 +2798,16 @@ napi_value WebGLRenderingContext::ClientWaitSync(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 3, nullptr);
 
-  ENSURE_VALUE_IS_OBJECT_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[2], nullptr);
 
-  GLsync sync;
-  nstatus = napi_unwrap(env, args[0], reinterpret_cast<void **>(&sync));
+  GLsync sync = nullptr;
+  nstatus = GetSyncParam(env, args[0], &sync);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (sync == nullptr) {
+    NAPI_THROW_ERROR(env, "sync must not be null");
+    return nullptr;
+  }
 
   GLbitfield flags;
   nstatus = napi_get_value_uint32(env, args[1], &flags);
@@ -2799,13 +2882,16 @@ WebGLRenderingContext::CompressedTexImage2D(napi_env env,
 
   napi_status nstatus;
 
-  size_t argc = 7;
-  napi_value args[7];
+  size_t argc = 9;
+  napi_value args[9];
   napi_value js_this;
 
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 7, nullptr);
+  if (argc < 7 || argc > 9) {
+    NAPI_THROW_ERROR(env, "compressedTexImage2D expects 7, 8, or 9 arguments");
+    return nullptr;
+  }
 
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
@@ -2838,17 +2924,53 @@ WebGLRenderingContext::CompressedTexImage2D(napi_env env,
   nstatus = napi_get_value_int32(env, args[5], &border);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  ArrayLikeBuffer alb;
-  nstatus = GetArrayLikeBuffer(env, args[6], &alb);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  GLsizei image_size = 0;
+  const void *data = nullptr;
+  ArrayLikeBuffer alb;
+  napi_valuetype data_type;
+  nstatus = napi_typeof(env, args[6], &data_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (data_type == napi_number) {
+    if (argc != 8) {
+      NAPI_THROW_ERROR(
+          env, "compressedTexImage2D PBO upload expects imageSize and offset");
+      return nullptr;
+    }
+    nstatus =
+        GetNonNegativeIntegerParam<GLsizei>(env, args[6], "imageSize",
+                                            &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = GetPixelBufferOffsetPointer(env, context->eglContextWrapper_,
+                                          GL_PIXEL_UNPACK_BUFFER_BINDING,
+                                          args[7], "offset", &data);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  } else {
+    uint32_t src_offset = 0;
+    uint32_t src_length = 0;
+    bool has_src_length = false;
+    if (argc >= 8) {
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[7], "srcOffset", &src_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+    if (argc >= 9) {
+      nstatus = GetOptionalArrayOffsetParam(env, args[8], "srcLengthOverride",
+                                            &src_length);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      has_src_length = true;
+    }
+    nstatus = GetArrayLikeBufferView(env, args[6], src_offset, has_src_length,
+                                     src_length, "srcData", &alb, &data,
+                                     &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
   context->eglContextWrapper_->glCompressedTexImage2D(
-      target, level, internal_format, width, height, border,
-      static_cast<GLsizei>(alb.length), alb.data);
+      target, level, internal_format, width, height, border, image_size, data);
 
 #if DEBUG
   context->CheckForErrors();
@@ -2863,13 +2985,13 @@ WebGLRenderingContext::CompressedTexImage3D(napi_env env,
   LOG_CALL("CompressedTexImage3D");
   napi_status nstatus;
 
-  size_t argc = 9;
-  napi_value args[9];
+  size_t argc = 10;
+  napi_value args[10];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc != 8 && argc != 9) {
-    NAPI_THROW_ERROR(env, "compressedTexImage3D expects 8 or 9 arguments");
+  if (argc < 8 || argc > 10) {
+    NAPI_THROW_ERROR(env, "compressedTexImage3D expects 8, 9, or 10 arguments");
     return nullptr;
   }
 
@@ -2899,27 +3021,51 @@ WebGLRenderingContext::CompressedTexImage3D(napi_env env,
   nstatus = napi_get_value_int32(env, args[6], &border);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  GLsizei image_size = 0;
-  const void *data = nullptr;
-  ArrayLikeBuffer alb;
-  if (argc == 8) {
-    nstatus = GetArrayLikeBuffer(env, args[7], &alb);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    image_size = static_cast<GLsizei>(alb.length);
-    data = alb.data;
-  } else {
-    GLintptr offset;
-    nstatus = napi_get_value_int32(env, args[7], &image_size);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    nstatus =
-        GetNonNegativeIntegerParam<GLintptr>(env, args[8], "offset", &offset);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
-  }
-
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+  GLsizei image_size = 0;
+  const void *data = nullptr;
+  ArrayLikeBuffer alb;
+  napi_valuetype data_type;
+  nstatus = napi_typeof(env, args[7], &data_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (data_type == napi_number) {
+    if (argc != 9) {
+      NAPI_THROW_ERROR(
+          env, "compressedTexImage3D PBO upload expects imageSize and offset");
+      return nullptr;
+    }
+    nstatus =
+        GetNonNegativeIntegerParam<GLsizei>(env, args[7], "imageSize",
+                                            &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = GetPixelBufferOffsetPointer(env, context->eglContextWrapper_,
+                                          GL_PIXEL_UNPACK_BUFFER_BINDING,
+                                          args[8], "offset", &data);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  } else {
+    uint32_t src_offset = 0;
+    uint32_t src_length = 0;
+    bool has_src_length = false;
+    if (argc >= 9) {
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[8], "srcOffset", &src_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+    if (argc >= 10) {
+      nstatus = GetOptionalArrayOffsetParam(env, args[9], "srcLengthOverride",
+                                            &src_length);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      has_src_length = true;
+    }
+    nstatus = GetArrayLikeBufferView(env, args[7], src_offset, has_src_length,
+                                     src_length, "srcData", &alb, &data,
+                                     &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
   ENSURE_GL_PROC_RETVAL(env, context, glCompressedTexImage3D, nullptr);
   context->eglContextWrapper_->glCompressedTexImage3D(
       target, level, internal_format, width, height, depth, border, image_size,
@@ -2938,13 +3084,17 @@ WebGLRenderingContext::CompressedTexSubImage2D(napi_env env,
 
   napi_status nstatus;
 
-  size_t argc = 8;
-  napi_value args[8];
+  size_t argc = 10;
+  napi_value args[10];
   napi_value js_this;
 
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 8, nullptr);
+  if (argc < 8 || argc > 10) {
+    NAPI_THROW_ERROR(env,
+                     "compressedTexSubImage2D expects 8, 9, or 10 arguments");
+    return nullptr;
+  }
 
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
@@ -2982,17 +3132,54 @@ WebGLRenderingContext::CompressedTexSubImage2D(napi_env env,
   nstatus = napi_get_value_uint32(env, args[6], &format);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  ArrayLikeBuffer alb;
-  nstatus = GetArrayLikeBuffer(env, args[7], &alb);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  GLsizei image_size = 0;
+  const void *data = nullptr;
+  ArrayLikeBuffer alb;
+  napi_valuetype data_type;
+  nstatus = napi_typeof(env, args[7], &data_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (data_type == napi_number) {
+    if (argc != 9) {
+      NAPI_THROW_ERROR(env,
+                       "compressedTexSubImage2D PBO upload expects imageSize "
+                       "and offset");
+      return nullptr;
+    }
+    nstatus =
+        GetNonNegativeIntegerParam<GLsizei>(env, args[7], "imageSize",
+                                            &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = GetPixelBufferOffsetPointer(env, context->eglContextWrapper_,
+                                          GL_PIXEL_UNPACK_BUFFER_BINDING,
+                                          args[8], "offset", &data);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  } else {
+    uint32_t src_offset = 0;
+    uint32_t src_length = 0;
+    bool has_src_length = false;
+    if (argc >= 9) {
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[8], "srcOffset", &src_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+    if (argc >= 10) {
+      nstatus = GetOptionalArrayOffsetParam(env, args[9], "srcLengthOverride",
+                                            &src_length);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      has_src_length = true;
+    }
+    nstatus = GetArrayLikeBufferView(env, args[7], src_offset, has_src_length,
+                                     src_length, "srcData", &alb, &data,
+                                     &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
   context->eglContextWrapper_->glCompressedTexSubImage2D(
-      target, level, xoffset, yoffset, width, height, format,
-      static_cast<GLsizei>(alb.length), alb.data);
+      target, level, xoffset, yoffset, width, height, format, image_size, data);
 
 #if DEBUG
   context->CheckForErrors();
@@ -3007,13 +3194,14 @@ WebGLRenderingContext::CompressedTexSubImage3D(napi_env env,
   LOG_CALL("CompressedTexSubImage3D");
   napi_status nstatus;
 
-  size_t argc = 11;
-  napi_value args[11];
+  size_t argc = 12;
+  napi_value args[12];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc != 10 && argc != 11) {
-    NAPI_THROW_ERROR(env, "compressedTexSubImage3D expects 10 or 11 arguments");
+  if (argc < 10 || argc > 12) {
+    NAPI_THROW_ERROR(env,
+                     "compressedTexSubImage3D expects 10, 11, or 12 arguments");
     return nullptr;
   }
 
@@ -3049,27 +3237,52 @@ WebGLRenderingContext::CompressedTexSubImage3D(napi_env env,
   nstatus = napi_get_value_uint32(env, args[8], &format);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  GLsizei image_size = 0;
-  const void *data = nullptr;
-  ArrayLikeBuffer alb;
-  if (argc == 10) {
-    nstatus = GetArrayLikeBuffer(env, args[9], &alb);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    image_size = static_cast<GLsizei>(alb.length);
-    data = alb.data;
-  } else {
-    GLintptr offset;
-    nstatus = napi_get_value_int32(env, args[9], &image_size);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    nstatus =
-        GetNonNegativeIntegerParam<GLintptr>(env, args[10], "offset", &offset);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
-  }
-
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+  GLsizei image_size = 0;
+  const void *data = nullptr;
+  ArrayLikeBuffer alb;
+  napi_valuetype data_type;
+  nstatus = napi_typeof(env, args[9], &data_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (data_type == napi_number) {
+    if (argc != 11) {
+      NAPI_THROW_ERROR(env,
+                       "compressedTexSubImage3D PBO upload expects imageSize "
+                       "and offset");
+      return nullptr;
+    }
+    nstatus =
+        GetNonNegativeIntegerParam<GLsizei>(env, args[9], "imageSize",
+                                            &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = GetPixelBufferOffsetPointer(env, context->eglContextWrapper_,
+                                          GL_PIXEL_UNPACK_BUFFER_BINDING,
+                                          args[10], "offset", &data);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  } else {
+    uint32_t src_offset = 0;
+    uint32_t src_length = 0;
+    bool has_src_length = false;
+    if (argc >= 11) {
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[10], "srcOffset", &src_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+    if (argc >= 12) {
+      nstatus = GetOptionalArrayOffsetParam(env, args[11], "srcLengthOverride",
+                                            &src_length);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      has_src_length = true;
+    }
+    nstatus = GetArrayLikeBufferView(env, args[9], src_offset, has_src_length,
+                                     src_length, "srcData", &alb, &data,
+                                     &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
   ENSURE_GL_PROC_RETVAL(env, context, glCompressedTexSubImage3D, nullptr);
   context->eglContextWrapper_->glCompressedTexSubImage3D(
       target, level, xoffset, yoffset, zoffset, width, height, depth, format,
@@ -3682,13 +3895,23 @@ napi_value WebGLRenderingContext::DeleteSync(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glDeleteSync, nullptr);
 
-  GLsync sync = nullptr;
-  nstatus = GetSyncParam(env, args[0], &sync);
+  napi_valuetype value_type;
+  nstatus = napi_typeof(env, args[0], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (sync != nullptr) {
-    context->eglContextWrapper_->glDeleteSync(sync);
+  if (value_type == napi_null || value_type == napi_undefined) {
+    return nullptr;
+  }
+  ENSURE_VALUE_IS_OBJECT_RETVAL(env, args[0], nullptr);
+
+  GLSyncHandle *handle = nullptr;
+  nstatus = napi_unwrap(env, args[0], reinterpret_cast<void **>(&handle));
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (handle != nullptr && handle->sync != nullptr) {
+    context->eglContextWrapper_->glDeleteSync(handle->sync);
+    handle->sync = nullptr;
     void *removed = nullptr;
     napi_remove_wrap(env, args[0], &removed);
+    delete static_cast<GLSyncHandle *>(removed);
   }
 #if DEBUG
   context->CheckForErrors();
@@ -4262,8 +4485,15 @@ napi_value WebGLRenderingContext::FenceSynce(napi_env env,
   uint32_t args[2];
   napi_status nstatus = GetContextUint32Params(env, info, &context, 2, args);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_GL_PROC_RETVAL(env, context, glFenceSync, nullptr);
 
   GLsync sync = context->eglContextWrapper_->glFenceSync(args[0], args[1]);
+  if (sync == nullptr) {
+    napi_value null_value;
+    nstatus = napi_get_null(env, &null_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return null_value;
+  }
 
   napi_value sync_value;
   nstatus = WrapGLsync(env, sync, context->eglContextWrapper_, &sync_value);
@@ -4569,6 +4799,122 @@ WebGLRenderingContext::GetInternalformatParameter(napi_env env,
   return param_value;
 }
 
+static napi_status SetIntConstant(napi_env env, napi_value object,
+                                  const char *name, int32_t value) {
+  napi_value value_object;
+  napi_status nstatus = napi_create_int32(env, value, &value_object);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = napi_set_named_property(env, object, name, value_object);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  return napi_ok;
+}
+
+static napi_status SetBoundMethodAlias(napi_env env, napi_value target,
+                                       napi_value source_this,
+                                       const char *source_name,
+                                       const char *alias_name) {
+  napi_status nstatus;
+  napi_value source_function;
+  nstatus = napi_get_named_property(env, source_this, source_name,
+                                    &source_function);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  napi_valuetype value_type;
+  nstatus = napi_typeof(env, source_function, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  if (value_type != napi_function) {
+    std::string message = std::string(source_name) + " is not a function";
+    NAPI_THROW_ERROR(env, message.c_str());
+    return napi_invalid_arg;
+  }
+
+  napi_value bind_function;
+  nstatus = napi_get_named_property(env, source_function, "bind",
+                                    &bind_function);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  napi_value argv[] = {source_this};
+  napi_value bound_function;
+  nstatus = napi_call_function(env, source_function, bind_function, 1, argv,
+                               &bound_function);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = napi_set_named_property(env, target, alias_name, bound_function);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  return napi_ok;
+}
+
+static napi_status CreateANGLEInstancedArraysAlias(napi_env env,
+                                                  napi_value context,
+                                                  napi_value *result) {
+  napi_status nstatus = napi_create_object(env, result);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetIntConstant(env, *result, "VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE",
+                           GL_VERTEX_ATTRIB_ARRAY_DIVISOR);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "drawArraysInstanced",
+                                "drawArraysInstancedANGLE");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "drawElementsInstanced",
+                                "drawElementsInstancedANGLE");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "vertexAttribDivisor",
+                                "vertexAttribDivisorANGLE");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  return napi_ok;
+}
+
+static napi_status CreateOESVertexArrayObjectAlias(napi_env env,
+                                                   napi_value context,
+                                                   napi_value *result) {
+  napi_status nstatus = napi_create_object(env, result);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus =
+      SetIntConstant(env, *result, "VERTEX_ARRAY_BINDING_OES",
+                     GL_VERTEX_ARRAY_BINDING);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "createVertexArray",
+                                "createVertexArrayOES");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "deleteVertexArray",
+                                "deleteVertexArrayOES");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "isVertexArray",
+                                "isVertexArrayOES");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "bindVertexArray",
+                                "bindVertexArrayOES");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  return napi_ok;
+}
+
+static napi_status CreateWEBGLDrawBuffersAlias(napi_env env,
+                                               napi_value context,
+                                               napi_value *result) {
+  napi_status nstatus = napi_create_object(env, result);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *result, context, "drawBuffers",
+                                "drawBuffersWEBGL");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetIntConstant(env, *result, "MAX_DRAW_BUFFERS_WEBGL",
+                           GL_MAX_DRAW_BUFFERS);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetIntConstant(env, *result, "MAX_COLOR_ATTACHMENTS_WEBGL",
+                           GL_MAX_COLOR_ATTACHMENTS);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  for (int i = 0; i < 16; ++i) {
+    std::string color_name =
+        std::string("COLOR_ATTACHMENT") + std::to_string(i) + "_WEBGL";
+    std::string draw_name =
+        std::string("DRAW_BUFFER") + std::to_string(i) + "_WEBGL";
+    nstatus = SetIntConstant(env, *result, color_name.c_str(),
+                             GL_COLOR_ATTACHMENT0 + i);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+    nstatus =
+        SetIntConstant(env, *result, draw_name.c_str(), GL_DRAW_BUFFER0 + i);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  }
+  return napi_ok;
+}
+
 /* static */
 napi_value WebGLRenderingContext::GetExtension(napi_env env,
                                                napi_callback_info info) {
@@ -4599,6 +4945,17 @@ napi_value WebGLRenderingContext::GetExtension(napi_env env,
 
   napi_value webgl_extension = nullptr;
   if (strcmp(name, "ANGLE_instanced_arrays") == 0 &&
+      egl_ctx->glDrawArraysInstanced && egl_ctx->glDrawElementsInstanced &&
+      egl_ctx->glVertexAttribDivisor) {
+    nstatus = CreateANGLEInstancedArraysAlias(env, js_this, &webgl_extension);
+  } else if (strcmp(name, "OES_vertex_array_object") == 0 &&
+             egl_ctx->glGenVertexArrays && egl_ctx->glDeleteVertexArrays &&
+             egl_ctx->glIsVertexArray && egl_ctx->glBindVertexArray) {
+    nstatus = CreateOESVertexArrayObjectAlias(env, js_this, &webgl_extension);
+  } else if (strcmp(name, "WEBGL_draw_buffers") == 0 &&
+             egl_ctx->glDrawBuffers) {
+    nstatus = CreateWEBGLDrawBuffersAlias(env, js_this, &webgl_extension);
+  } else if (strcmp(name, "ANGLE_instanced_arrays") == 0 &&
       ANGLEInstancedArraysExtension::IsSupported(egl_ctx)) {
     nstatus = ANGLEInstancedArraysExtension::NewInstance(env, &webgl_extension,
                                                          egl_ctx);
@@ -5234,8 +5591,8 @@ napi_value WebGLRenderingContext::GetBufferSubData(napi_env env,
     nstatus = napi_typeof(env, args[3], &value_type);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     if (value_type != napi_undefined) {
-      ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[3], nullptr);
-      nstatus = napi_get_value_uint32(env, args[3], &dst_offset);
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[3], "dstOffset", &dst_offset);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     }
   }
@@ -5253,8 +5610,7 @@ napi_value WebGLRenderingContext::GetBufferSubData(napi_env env,
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     if (value_type != napi_undefined) {
       uint32_t length;
-      ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[4], nullptr);
-      nstatus = napi_get_value_uint32(env, args[4], &length);
+      nstatus = GetOptionalArrayOffsetParam(env, args[4], "length", &length);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
       copy_element_count = length;
     }
@@ -5773,6 +6129,32 @@ WebGLRenderingContext::GetSupportedExtensions(napi_env env,
         napi_create_string_utf8(env, token.c_str(), token.size(), &str_value);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+    nstatus = napi_set_element(env, extensions_value, index++, str_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
+  const char *aliases[] = {"ANGLE_instanced_arrays", "OES_vertex_array_object",
+                           "WEBGL_draw_buffers"};
+  for (const char *alias : aliases) {
+    bool available = false;
+    if (strcmp(alias, "ANGLE_instanced_arrays") == 0) {
+      available = context->eglContextWrapper_->glDrawArraysInstanced &&
+                  context->eglContextWrapper_->glDrawElementsInstanced &&
+                  context->eglContextWrapper_->glVertexAttribDivisor;
+    } else if (strcmp(alias, "OES_vertex_array_object") == 0) {
+      available = context->eglContextWrapper_->glGenVertexArrays &&
+                  context->eglContextWrapper_->glDeleteVertexArrays &&
+                  context->eglContextWrapper_->glIsVertexArray &&
+                  context->eglContextWrapper_->glBindVertexArray;
+    } else if (strcmp(alias, "WEBGL_draw_buffers") == 0) {
+      available = context->eglContextWrapper_->glDrawBuffers;
+    }
+    if (!available) {
+      continue;
+    }
+    napi_value str_value;
+    nstatus = napi_create_string_utf8(env, alias, strlen(alias), &str_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     nstatus = napi_set_element(env, extensions_value, index++, str_value);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   }
@@ -6931,12 +7313,15 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
 
   napi_status nstatus;
 
-  size_t argc = 7;
-  napi_value args[7];
+  size_t argc = 8;
+  napi_value args[8];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 7, nullptr);
+  if (argc != 7 && argc != 8) {
+    NAPI_THROW_ERROR(env, "readPixels expects 7 or 8 arguments");
+    return nullptr;
+  }
 
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
@@ -6973,21 +7358,39 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
   nstatus = napi_get_value_uint32(env, args[5], &type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  void *data = nullptr;
   ArrayLikeBuffer alb;
-  nstatus = GetArrayLikeBuffer(env, args[6], &alb);
-  if (nstatus != napi_ok) {
-    napi_valuetype value_type;
-    nstatus = napi_typeof(env, args[6], &value_type);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-    if (value_type != napi_number) {
-      NAPI_THROW_ERROR(env, "Invalid value passed for data buffer");
+  napi_valuetype pixels_type;
+  nstatus = napi_typeof(env, args[6], &pixels_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (pixels_type == napi_number) {
+    if (argc == 8) {
+      NAPI_THROW_ERROR(env, "readPixels dstOffset requires ArrayBufferView data");
       return nullptr;
     }
+    const void *offset_data = nullptr;
+    nstatus = GetPixelBufferOffsetPointer(env, context->eglContextWrapper_,
+                                          GL_PIXEL_PACK_BUFFER_BINDING, args[6],
+                                          "offset", &offset_data);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    data = const_cast<void *>(offset_data);
+  } else {
+    uint32_t dst_offset = 0;
+    if (argc == 8) {
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[7], "dstOffset", &dst_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+    const void *view_data = nullptr;
+    GLsizei byte_length = 0;
+    nstatus = GetArrayLikeBufferView(env, args[6], dst_offset, false, 0,
+                                     "pixels", &alb, &view_data, &byte_length);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    data = const_cast<void *>(view_data);
   }
 
   context->eglContextWrapper_->glReadPixels(x, y, width, height, format, type,
-                                            alb.data);
+                                            data);
 
 #if DEBUG
   context->CheckForErrors();
@@ -7366,12 +7769,15 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
   LOG_CALL("TexImage3D");
   napi_status nstatus;
 
-  size_t argc = 10;
-  napi_value args[10];
+  size_t argc = 11;
+  napi_value args[11];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 10, nullptr);
+  if (argc != 10 && argc != 11) {
+    NAPI_THROW_ERROR(env, "texImage3D expects 10 or 11 arguments");
+    return nullptr;
+  }
 
   for (size_t i = 0; i < 9; ++i) {
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[i], nullptr);
@@ -7405,26 +7811,37 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
   nstatus = napi_get_value_uint32(env, args[8], &type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  WebGLRenderingContext *context = nullptr;
+  nstatus = UnwrapContext(env, js_this, &context);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
   const void *data = nullptr;
   ArrayLikeBuffer alb;
   napi_valuetype value_type;
   nstatus = napi_typeof(env, args[9], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (value_type == napi_number) {
-    GLintptr offset;
-    nstatus =
-        GetNonNegativeIntegerParam<GLintptr>(env, args[9], "offset", &offset);
+    if (argc == 11) {
+      NAPI_THROW_ERROR(env, "texImage3D srcOffset requires ArrayBufferView data");
+      return nullptr;
+    }
+    nstatus = GetPixelBufferOffsetPointer(env, context->eglContextWrapper_,
+                                          GL_PIXEL_UNPACK_BUFFER_BINDING,
+                                          args[9], "offset", &data);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
-  } else if (value_type != napi_null) {
-    nstatus = GetArrayLikeBuffer(env, args[9], &alb);
+  } else if (value_type != napi_null && value_type != napi_undefined) {
+    uint32_t src_offset = 0;
+    if (argc == 11) {
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[10], "srcOffset", &src_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+    GLsizei byte_length = 0;
+    nstatus = GetArrayLikeBufferView(env, args[9], src_offset, false, 0,
+                                     "srcData", &alb, &data, &byte_length);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    data = alb.data;
   }
 
-  WebGLRenderingContext *context = nullptr;
-  nstatus = UnwrapContext(env, js_this, &context);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glTexImage3D, nullptr);
   context->eglContextWrapper_->glTexImage3D(target, level, internal_format,
                                             width, height, depth, border,
@@ -7828,12 +8245,15 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
   LOG_CALL("TexSubImage3D");
   napi_status nstatus;
 
-  size_t argc = 11;
-  napi_value args[11];
+  size_t argc = 12;
+  napi_value args[12];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 11, nullptr);
+  if (argc != 11 && argc != 12) {
+    NAPI_THROW_ERROR(env, "texSubImage3D expects 11 or 12 arguments");
+    return nullptr;
+  }
 
   for (size_t i = 0; i < 10; ++i) {
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[i], nullptr);
@@ -7870,26 +8290,38 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
   nstatus = napi_get_value_uint32(env, args[9], &type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  WebGLRenderingContext *context = nullptr;
+  nstatus = UnwrapContext(env, js_this, &context);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
   const void *data = nullptr;
   ArrayLikeBuffer alb;
   napi_valuetype value_type;
   nstatus = napi_typeof(env, args[10], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (value_type == napi_number) {
-    GLintptr offset;
-    nstatus =
-        GetNonNegativeIntegerParam<GLintptr>(env, args[10], "offset", &offset);
+    if (argc == 12) {
+      NAPI_THROW_ERROR(env,
+                       "texSubImage3D srcOffset requires ArrayBufferView data");
+      return nullptr;
+    }
+    nstatus = GetPixelBufferOffsetPointer(env, context->eglContextWrapper_,
+                                          GL_PIXEL_UNPACK_BUFFER_BINDING,
+                                          args[10], "offset", &data);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    data = reinterpret_cast<const void *>(static_cast<uintptr_t>(offset));
   } else {
-    nstatus = GetArrayLikeBuffer(env, args[10], &alb);
+    uint32_t src_offset = 0;
+    if (argc == 12) {
+      nstatus =
+          GetOptionalArrayOffsetParam(env, args[11], "srcOffset", &src_offset);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    }
+    GLsizei byte_length = 0;
+    nstatus = GetArrayLikeBufferView(env, args[10], src_offset, false, 0,
+                                     "srcData", &alb, &data, &byte_length);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-    data = alb.data;
   }
 
-  WebGLRenderingContext *context = nullptr;
-  nstatus = UnwrapContext(env, js_this, &context);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glTexSubImage3D, nullptr);
   context->eglContextWrapper_->glTexSubImage3D(target, level, xoffset, yoffset,
                                                zoffset, width, height, depth,
