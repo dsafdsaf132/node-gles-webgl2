@@ -17,6 +17,20 @@
     "node": ">=8.11.0"
   },
   "license": "Apache-2.0",
+  "keywords": [
+    "webgl",
+    "webgl2",
+    "opengl-es",
+    "gles3",
+    "angle",
+    "headless-webgl",
+    "node-webgl",
+    "webgl-context",
+    "webgl2-context",
+    "offscreen-rendering",
+    "wasm-bindgen",
+    "native-addon"
+  ],
   "files": [
     "binding",
     "binding.gyp",
