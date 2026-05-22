@@ -1,4 +1,4 @@
-name: Publish to npm
+name: Publish
 
 on:
   workflow_dispatch:
@@ -14,6 +14,7 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      packages: write
 
     steps:
       - name: Check out
@@ -54,11 +55,14 @@ jobs:
           fi
 
           package_name="$(node -p "require('./package.json').name")"
-
           git fetch --tags origin
           if git rev-parse -q --verify "refs/tags/${tag}" >/dev/null; then
             tag_sha="$(git rev-list -n 1 "${tag}")"
             head_sha="$(git rev-parse HEAD)"
+            if [ "${tag_sha}" != "${head_sha}" ]; then
+              echo "::error::Git tag ${tag} exists at ${tag_sha}, but workflow HEAD is ${head_sha}"
+              exit 1
+            fi
             tag_version="$(git show "${tag}:package.json" | node -e "let input = ''; process.stdin.on('data', chunk => input += chunk); process.stdin.on('end', () => console.log(JSON.parse(input).version));")"
             if [ "${tag_version}" != "${version}" ]; then
               echo "::error::Git tag ${tag} exists, but its package.json version is ${tag_version}"
@@ -70,14 +74,17 @@ jobs:
             tag_exists=false
           fi
 
-          if npm view "${package_name}@${version}" version >/dev/null 2>&1; then
-            echo "::error::${package_name}@${version} is already published"
-            exit 1
+          if npm view "${package_name}@${version}" version --registry=https://registry.npmjs.org >/dev/null 2>&1; then
+            echo "${package_name}@${version} is already published to npm"
+            npm_published=true
+          else
+            npm_published=false
           fi
 
           echo "version=${version}" >> "$GITHUB_OUTPUT"
           echo "tag=${tag}" >> "$GITHUB_OUTPUT"
           echo "tag_exists=${tag_exists}" >> "$GITHUB_OUTPUT"
+          echo "npm_published=${npm_published}" >> "$GITHUB_OUTPUT"
 
       - name: Commit release version
         shell: bash
@@ -129,5 +136,59 @@ jobs:
       - name: Verify package contents
         run: npm pack --dry-run
 
-      - name: Publish
+      - name: Publish to npm
+        if: steps.release.outputs.npm_published != 'true'
         run: npm publish --access public
+
+      - name: Set up Node.js for GitHub Packages
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22.14.0
+          registry-url: https://npm.pkg.github.com
+          scope: "@dsafdsaf132"
+
+      - name: Check GitHub Package version
+        id: github_package
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          package="@dsafdsaf132/node-gles-webgl2@${{ steps.release.outputs.version }}"
+          if npm view "${package}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "${package} is already published to GitHub Packages"
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Prepare GitHub Packages metadata
+        if: steps.github_package.outputs.published != 'true'
+        run: |
+          npm pkg set name=@dsafdsaf132/node-gles-webgl2
+          npm pkg set publishConfig.registry=https://npm.pkg.github.com
+
+      - name: Verify GitHub Packages contents
+        if: steps.github_package.outputs.published != 'true'
+        run: npm pack --dry-run
+
+      - name: Publish to GitHub Packages
+        if: steps.github_package.outputs.published != 'true'
+        run: npm publish --registry=https://npm.pkg.github.com
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag="${{ steps.release.outputs.tag }}"
+          if gh release view "${tag}" >/dev/null 2>&1; then
+            echo "GitHub Release ${tag} already exists"
+          else
+            gh release create "${tag}" \
+              --title "${tag}" \
+              --notes "Release ${tag}"
+          fi
