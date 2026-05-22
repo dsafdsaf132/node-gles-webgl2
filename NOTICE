@@ -1,7 +1,0 @@
-node-gles-webgl2
-
-This project is a fork of node-gles and includes code originally developed by
-Google LLC under the Apache License, Version 2.0.
-
-Modifications in this repository add WebGL2 / OpenGL ES 3 bindings, packaging,
-CI, and publishing workflows for node-gles-webgl2.
