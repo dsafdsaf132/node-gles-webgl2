@@ -28,7 +28,6 @@
     "scripts/clean-dist.js",
     "scripts/install.js",
     "LICENSE",
-    "NOTICE",
     "README.md"
   ],
   "scripts": {
