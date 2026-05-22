@@ -297,6 +297,29 @@ static napi_status GetContextDoubleParams(napi_env env, napi_callback_info info,
 }
 
 template <typename T>
+static napi_status GetNullableUint32Param(napi_env env, napi_value value,
+                                          T *result) {
+  napi_status nstatus;
+  napi_valuetype value_type;
+  nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (value_type == napi_null || value_type == napi_undefined) {
+    *result = 0;
+    return napi_ok;
+  }
+
+  ENSURE_VALUE_IS_NUMBER_RETVAL(env, value, napi_invalid_arg);
+
+  uint32_t parsed;
+  nstatus = napi_get_value_uint32(env, value, &parsed);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  *result = static_cast<T>(parsed);
+  return napi_ok;
+}
+
+template <typename T>
 static napi_status GetNonNegativeIntegerParam(napi_env env, napi_value value,
                                               const char *name, T *result) {
   napi_valuetype value_type;
@@ -1969,11 +1992,11 @@ napi_value WebGLRenderingContext::BindBufferRange(napi_env env,
   GLuint buffer;
   GLintptr offset;
   GLsizeiptr size;
-  nstatus = napi_get_value_uint32(env, args[0], &target);
+  nstatus = GetNullableUint32Param(env, args[0], &target);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  nstatus = napi_get_value_uint32(env, args[1], &index);
+  nstatus = GetNullableUint32Param(env, args[1], &index);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  nstatus = napi_get_value_uint32(env, args[2], &buffer);
+  nstatus = GetNullableUint32Param(env, args[2], &buffer);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = GetNonNegativeIntegerParam<GLintptr>(env, args[3], "offset",
                                                  &offset);
@@ -3075,9 +3098,9 @@ napi_value WebGLRenderingContext::CopyBufferSubData(napi_env env,
   GLintptr read_offset;
   GLintptr write_offset;
   GLsizeiptr size;
-  nstatus = napi_get_value_uint32(env, args[0], &read_target);
+  nstatus = GetNullableUint32Param(env, args[0], &read_target);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  nstatus = napi_get_value_uint32(env, args[1], &write_target);
+  nstatus = GetNullableUint32Param(env, args[1], &write_target);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   nstatus = GetNonNegativeIntegerParam<GLintptr>(env, args[2], "readOffset",
                                                  &read_offset);
