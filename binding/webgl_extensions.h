@@ -226,15 +226,21 @@ class WebGLDepthTextureExtension : public GLExtensionBase {
 class WebGLLoseContextExtension : public GLExtensionBase {
   NAPI_BOOTSTRAP_METHODS
 
+ public:
+  // Called from GetExtension to wire the extension back to its parent context.
+  static void SetContextRef(napi_env env, napi_value instance,
+                            napi_value context_js_value);
+
  protected:
   WebGLLoseContextExtension(napi_env env);
-  virtual ~WebGLLoseContextExtension() {}
+  virtual ~WebGLLoseContextExtension();
 
   // User facing methods:
   static napi_value LoseContext(napi_env env, napi_callback_info info);
   static napi_value RestoreContext(napi_env env, napi_callback_info info);
 
  private:
+  napi_ref context_ref_ = nullptr;
   static napi_value InitInternal(napi_env env, napi_callback_info info);
   static void Cleanup(napi_env env, void* native, void* hint);
 };

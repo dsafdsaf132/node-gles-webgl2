@@ -152,6 +152,23 @@ function testDestroyApi() {
   assert.throws(() => gl.clear(gl.COLOR_BUFFER_BIT), /destroyed/);
 }
 
+function testLoseContextApi() {
+  const gl = createContext();
+  const ext = gl.getExtension("WEBGL_lose_context");
+  assert.notStrictEqual(ext, null, "WEBGL_lose_context should be supported");
+  assert.strictEqual(typeof ext.loseContext, "function");
+  assert.strictEqual(gl.isContextLost(), false);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  assertNoError(gl, "context before loseContext");
+  assert.doesNotThrow(() => ext.loseContext());
+  assert.strictEqual(gl.isContextLost(), true, "isContextLost should be true after loseContext");
+  assert.throws(() => gl.clear(gl.COLOR_BUFFER_BIT), /destroyed/,
+                "GL call after loseContext should throw");
+  // Second call should be a no-op.
+  assert.doesNotThrow(() => ext.loseContext());
+}
+
 function testSequentialContextCleanup() {
   const result = spawnSync(process.execPath, ["--expose-gc", "-e", `
     const assert = require("assert");
@@ -184,6 +201,43 @@ function testSequentialContextCleanup() {
   assert.strictEqual(
       result.stderr, "",
       `sequential context cleanup wrote stderr:\n${result.stderr}`);
+}
+
+function testLoseContextSequentialCleanup() {
+  // Simulates the wasm-gerber-renderer pattern: create → render → loseContext,
+  // repeated in the same process. Exercises the repeated lifecycle path.
+  const result = spawnSync(process.execPath, ["-e", `
+    const assert = require("assert");
+    const nodeGles = require(".");
+    for (let i = 0; i < 16; ++i) {
+      const gl = nodeGles.createWebGLRenderingContext({
+        width: 64,
+        height: 64,
+        majorVersion: 3,
+        minorVersion: 0
+      });
+      const ext = gl.getExtension("WEBGL_lose_context");
+      gl.clearColor(i % 2, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      const pixel = new Uint8Array(4);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      const expected = i % 2 === 0 ? 0 : 255;
+      assert.strictEqual(pixel[0], expected,
+          "pixel[0] mismatch on iteration " + i);
+      ext.loseContext();
+      assert.strictEqual(gl.isContextLost(), true,
+          "isContextLost should be true after loseContext on iteration " + i);
+    }
+  `], {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8"
+  });
+  assert.strictEqual(
+      result.status, 0,
+      `loseContext lifecycle failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.strictEqual(
+      result.stderr, "",
+      `loseContext lifecycle wrote stderr:\n${result.stderr}`);
 }
 
 function testWebGLOnlyPixelStore(gl) {
@@ -593,4 +647,6 @@ testInstancedDrawing(gl, false);
 testInstancedDrawing(gl, true);
 testWebGL2PixelStoreIsGatedForES2();
 testDestroyApi();
+testLoseContextApi();
 testSequentialContextCleanup();
+testLoseContextSequentialCleanup();

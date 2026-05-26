@@ -6171,6 +6171,9 @@ napi_value WebGLRenderingContext::GetExtension(napi_env env,
              WebGLLoseContextExtension::IsSupported(egl_ctx)) {
     nstatus =
         WebGLLoseContextExtension::NewInstance(env, &webgl_extension, egl_ctx);
+    if (nstatus == napi_ok) {
+      WebGLLoseContextExtension::SetContextRef(env, webgl_extension, js_this);
+    }
   } else {
     fprintf(stderr, "Unsupported extension: %s\n", name);
     nstatus = napi_get_null(env, &webgl_extension);

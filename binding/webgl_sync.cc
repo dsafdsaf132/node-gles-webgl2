@@ -71,6 +71,12 @@ static void DeleteGLsync(EGLContextWrapper* egl_context_wrapper, GLsync* sync) {
       egl_context_wrapper->glDeleteSync == nullptr) {
     return;
   }
+  // glDeleteSync must be called with the owning context current. If another
+  // context is bound, the sync will be freed when its EGL context is destroyed.
+  if (eglGetCurrentContext() != egl_context_wrapper->context) {
+    *sync = nullptr;
+    return;
+  }
   egl_context_wrapper->glDeleteSync(*sync);
   *sync = nullptr;
 }
