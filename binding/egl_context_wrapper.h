@@ -85,10 +85,12 @@ class EGLContextWrapper {
 
   bool ResizeSurface(napi_env env, uint32_t width, uint32_t height);
   void Destroy();
+  bool IsCurrent() const;
+  bool MakeCurrent() const;
   void FlushPendingSyncDeletes();
 
-  // GLsync objects that could not be deleted immediately (wrong context
-  // current at finalization time). Flushed during Destroy().
+  // GLsync objects that could not be deleted immediately because the owner
+  // context could not be rebound. Flushed during Destroy().
   std::vector<GLsync> pending_sync_deletes;
 
   EGLContext context;

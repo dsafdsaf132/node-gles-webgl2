@@ -240,6 +240,57 @@ function testLoseContextSequentialCleanup() {
       `loseContext lifecycle wrote stderr:\n${result.stderr}`);
 }
 
+function testSyncFinalizerRestoresCurrentContext() {
+  const result = spawnSync(process.execPath, ["--expose-gc", "-e", `
+    const assert = require("assert");
+    const nodeGles = require(".");
+
+    const gl1 = nodeGles.createWebGLRenderingContext({
+      width: 4,
+      height: 4,
+      majorVersion: 3,
+      minorVersion: 0
+    });
+    let syncs = [];
+    for (let i = 0; i < 32; ++i) {
+      syncs.push(gl1.fenceSync(gl1.SYNC_GPU_COMMANDS_COMPLETE, 0));
+    }
+    gl1.flush();
+
+    const gl2 = nodeGles.createWebGLRenderingContext({
+      width: 16,
+      height: 16,
+      majorVersion: 3,
+      minorVersion: 0
+    });
+    gl2.clearColor(0, 1, 0, 1);
+    gl2.clear(gl2.COLOR_BUFFER_BIT);
+    assert.strictEqual(gl2.getError(), gl2.NO_ERROR);
+
+    syncs = null;
+    for (let i = 0; i < 8; ++i) {
+      global.gc();
+    }
+
+    const pixel = new Uint8Array(4);
+    gl2.readPixels(15, 15, 1, 1, gl2.RGBA, gl2.UNSIGNED_BYTE, pixel);
+    assert.strictEqual(gl2.getError(), gl2.NO_ERROR);
+    assert.deepStrictEqual(Array.from(pixel), [0, 255, 0, 255]);
+
+    gl2.destroy();
+    gl1.destroy();
+  `], {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8"
+  });
+  assert.strictEqual(
+      result.status, 0,
+      `sync finalizer current restore failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.strictEqual(
+      result.stderr, "",
+      `sync finalizer current restore wrote stderr:\n${result.stderr}`);
+}
+
 function testWebGLOnlyPixelStore(gl) {
   assert.strictEqual(gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), false);
   assert.strictEqual(gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), false);
@@ -650,3 +701,4 @@ testDestroyApi();
 testLoseContextApi();
 testSequentialContextCleanup();
 testLoseContextSequentialCleanup();
+testSyncFinalizerRestoresCurrentContext();

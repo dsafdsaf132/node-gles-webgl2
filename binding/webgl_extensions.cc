@@ -961,8 +961,7 @@ napi_value WebGLLoseContextExtension::LoseContext(napi_env env,
   }
 
   napi_value context_value = nullptr;
-  nstatus =
-      napi_get_reference_value(env, ext->context_ref_, &context_value);
+  nstatus = napi_get_reference_value(env, ext->context_ref_, &context_value);
   if (nstatus != napi_ok || context_value == nullptr) {
     return nullptr;  // Context was already GC'd.
   }
