@@ -87,6 +87,7 @@ class EGLContextWrapper {
   void Destroy();
   bool IsCurrent() const;
   bool MakeCurrent() const;
+  bool EnsureCurrent() const;
   void FlushPendingSyncDeletes();
 
   // GLsync objects that could not be deleted immediately because the owner

@@ -52,6 +52,7 @@ class WebGLRenderingContext {
   static napi_status DestroyContextObject(napi_env env,
                                           napi_value context_value);
   bool HasNativeResources() const;
+  bool EnsureNativeContextCurrent() const;
 
  private:
   WebGLRenderingContext(napi_env env, GLContextOptions opts);

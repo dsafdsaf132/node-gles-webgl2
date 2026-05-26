@@ -297,6 +297,31 @@ function testSyncFinalizerRestoresCurrentContext() {
       `sync finalizer current restore wrote stderr:\n${result.stderr}`);
 }
 
+function testMultipleLiveContextsUseOwnCurrentContext() {
+  const gl1 = createContext({ width: 16, height: 16 });
+  gl1.clearColor(1, 0, 0, 1);
+  gl1.clear(gl1.COLOR_BUFFER_BIT);
+  assertNoError(gl1, "gl1 initial clear");
+
+  const gl2 = createContext({ width: 16, height: 16 });
+  gl2.clearColor(0, 1, 0, 1);
+  gl2.clear(gl2.COLOR_BUFFER_BIT);
+  assertNoError(gl2, "gl2 initial clear");
+
+  const pixel1 = new Uint8Array(4);
+  gl1.readPixels(0, 0, 1, 1, gl1.RGBA, gl1.UNSIGNED_BYTE, pixel1);
+  assertNoError(gl1, "gl1 read after gl2 became current");
+  assert.deepStrictEqual(Array.from(pixel1), [255, 0, 0, 255]);
+
+  const pixel2 = new Uint8Array(4);
+  gl2.readPixels(0, 0, 1, 1, gl2.RGBA, gl2.UNSIGNED_BYTE, pixel2);
+  assertNoError(gl2, "gl2 read after gl1 call");
+  assert.deepStrictEqual(Array.from(pixel2), [0, 255, 0, 255]);
+
+  gl1.destroy();
+  gl2.destroy();
+}
+
 function testWebGLOnlyPixelStore(gl) {
   assert.strictEqual(gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), false);
   assert.strictEqual(gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), false);
@@ -708,3 +733,4 @@ testLoseContextApi();
 testSequentialContextCleanup();
 testLoseContextSequentialCleanup();
 testSyncFinalizerRestoresCurrentContext();
+testMultipleLiveContextsUseOwnCurrentContext();
