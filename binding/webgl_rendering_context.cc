@@ -133,6 +133,9 @@ bool WebGLRenderingContext::CheckForErrors() {
 #define GL_UNPACK_FLIP_Y_WEBGL 0x9240
 #define GL_UNPACK_PREMULTIPLY_ALPHA_WEBGL 0x9241
 
+static napi_status UnwrapContext(napi_env env, napi_value js_this,
+                                 WebGLRenderingContext **context);
+
 // Returns wrapped context pointer only.
 static napi_status GetContext(napi_env env, napi_callback_info info,
                               WebGLRenderingContext **context) {
@@ -144,7 +147,7 @@ static napi_status GetContext(napi_env env, napi_callback_info info,
 
   ENSURE_VALUE_IS_OBJECT_RETVAL(env, js_this, napi_invalid_arg);
 
-  nstatus = napi_unwrap(env, js_this, reinterpret_cast<void **>(context));
+  nstatus = UnwrapContext(env, js_this, context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
   return napi_ok;
@@ -153,7 +156,14 @@ static napi_status GetContext(napi_env env, napi_callback_info info,
 static napi_status UnwrapContext(napi_env env, napi_value js_this,
                                  WebGLRenderingContext **context) {
   ENSURE_VALUE_IS_OBJECT_RETVAL(env, js_this, napi_invalid_arg);
-  return napi_unwrap(env, js_this, reinterpret_cast<void **>(context));
+  napi_status nstatus =
+      napi_unwrap(env, js_this, reinterpret_cast<void **>(context));
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  if (*context == nullptr || !(*context)->HasNativeResources()) {
+    NAPI_THROW_ERROR(env, "WebGLRenderingContext has been destroyed");
+    return napi_invalid_arg;
+  }
+  return napi_ok;
 }
 
 // TODO(cleanup and refactor) all of these helpers!
@@ -1931,6 +1941,7 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
                                              GLContextOptions opts)
     : env_(env),
       ref_(nullptr),
+      eglContextWrapper_(nullptr),
       drawing_buffer_color_space_("srgb"),
       unpack_color_space_("srgb") {
   eglContextWrapper_ = EGLContextWrapper::Create(env, opts);
@@ -1957,10 +1968,21 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
   alloc_count_ = 0;
 }
 
-WebGLRenderingContext::~WebGLRenderingContext() {
+bool WebGLRenderingContext::HasNativeResources() const {
+  return eglContextWrapper_ != nullptr;
+}
+
+void WebGLRenderingContext::DestroyNativeResources() {
   if (eglContextWrapper_) {
+    InvalidateGLSyncHandlesForContext(env_, eglContextWrapper_);
     delete eglContextWrapper_;
+    eglContextWrapper_ = nullptr;
   }
+  pending_errors_.clear();
+}
+
+WebGLRenderingContext::~WebGLRenderingContext() {
+  DestroyNativeResources();
 
   napi_delete_reference(env_, ref_);
 }
@@ -2046,6 +2068,8 @@ napi_status WebGLRenderingContext::Register(napi_env env, napi_value exports) {
       NAPI_DEFINE_METHOD("deleteTexture", DeleteTexture),
       NAPI_DEFINE_METHOD("deleteTransformFeedback", DeleteTransformFeedback),
       NAPI_DEFINE_METHOD("deleteVertexArray", DeleteVertexArray),
+      NAPI_DEFINE_METHOD("destroy", Destroy),
+      NAPI_DEFINE_METHOD("dispose", Dispose),
       NAPI_DEFINE_METHOD("depthFunc", DepthFunc),
       NAPI_DEFINE_METHOD("depthMask", DepthMask),
       NAPI_DEFINE_METHOD("depthRange", DepthRange),
@@ -5082,6 +5106,32 @@ napi_value WebGLRenderingContext::DeleteVertexArray(napi_env env,
 }
 
 /* static */
+napi_value WebGLRenderingContext::Destroy(napi_env env,
+                                          napi_callback_info info) {
+  LOG_CALL("Destroy");
+
+  napi_value js_this;
+  napi_status nstatus =
+      napi_get_cb_info(env, info, nullptr, nullptr, &js_this, nullptr);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_VALUE_IS_OBJECT_RETVAL(env, js_this, nullptr);
+
+  WebGLRenderingContext *context = nullptr;
+  nstatus = napi_unwrap(env, js_this, reinterpret_cast<void **>(&context));
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (context != nullptr) {
+    context->DestroyNativeResources();
+  }
+  return nullptr;
+}
+
+/* static */
+napi_value WebGLRenderingContext::Dispose(napi_env env,
+                                          napi_callback_info info) {
+  return Destroy(env, info);
+}
+
+/* static */
 napi_value WebGLRenderingContext::DepthFunc(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("DepthFunc");
@@ -8041,9 +8091,18 @@ napi_value WebGLRenderingContext::IsContextLost(napi_env env,
   LOG_CALL("IsContextLost");
   napi_status nstatus;
 
-  // Headless bindings never lose context:
+  napi_value js_this;
+  nstatus = napi_get_cb_info(env, info, nullptr, nullptr, &js_this, nullptr);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_VALUE_IS_OBJECT_RETVAL(env, js_this, nullptr);
+
+  WebGLRenderingContext *context = nullptr;
+  nstatus = napi_unwrap(env, js_this, reinterpret_cast<void **>(&context));
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
   napi_value result_value;
-  nstatus = napi_get_boolean(env, false, &result_value);
+  nstatus = napi_get_boolean(
+      env, context == nullptr || !context->HasNativeResources(), &result_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   return result_value;

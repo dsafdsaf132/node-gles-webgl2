@@ -83,6 +83,7 @@ class EGLContextWrapper {
                                    const GLContextOptions& context_options);
 
   bool ResizeSurface(napi_env env, uint32_t width, uint32_t height);
+  void Destroy();
 
   EGLContext context;
   EGLDisplay display;
@@ -343,6 +344,8 @@ class EGLContextWrapper {
   void InitEGL(napi_env env, const GLContextOptions& context_options);
   void BindProcAddresses();
   void RefreshGLVersion();
+
+  bool display_ref_retained_;
 };
 
 }  // namespace nodejsgl

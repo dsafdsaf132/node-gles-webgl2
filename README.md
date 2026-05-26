@@ -55,6 +55,22 @@ paths:
 Texture upload and pixel readback paths support WebGL2 typed-array offsets and
 pixel buffer object numeric offsets where GLES3 supports them.
 
+## Context Lifecycle
+
+For batch rendering, call `gl.destroy()` or `gl.dispose()` after the final
+`readPixels()` for a context. This releases the native EGL context and pbuffer
+surface immediately instead of waiting for JavaScript garbage collection.
+
+```js
+const gl = nodeGles.createWebGLRenderingContext({ width: 3000, height: 2000 });
+
+try {
+  // render and readPixels
+} finally {
+  gl.destroy();
+}
+```
+
 ## Build From Source
 
 ```sh

@@ -23,9 +23,89 @@
 #include "angle/include/EGL/eglext.h"
 
 #include <cstdio>
+#include <iomanip>
+#include <iostream>
+#include <map>
+#include <mutex>
 #include <vector>
 
 namespace nodejsgl {
+
+namespace {
+
+std::mutex egl_display_ref_counts_mutex;
+std::map<EGLDisplay, size_t> egl_display_ref_counts;
+
+const char* GetEGLErrorName(EGLint error) {
+  switch (error) {
+    case EGL_SUCCESS:
+      return "EGL_SUCCESS";
+    case EGL_NOT_INITIALIZED:
+      return "EGL_NOT_INITIALIZED";
+    case EGL_BAD_ACCESS:
+      return "EGL_BAD_ACCESS";
+    case EGL_BAD_ALLOC:
+      return "EGL_BAD_ALLOC";
+    case EGL_BAD_ATTRIBUTE:
+      return "EGL_BAD_ATTRIBUTE";
+    case EGL_BAD_CONTEXT:
+      return "EGL_BAD_CONTEXT";
+    case EGL_BAD_CONFIG:
+      return "EGL_BAD_CONFIG";
+    case EGL_BAD_CURRENT_SURFACE:
+      return "EGL_BAD_CURRENT_SURFACE";
+    case EGL_BAD_DISPLAY:
+      return "EGL_BAD_DISPLAY";
+    case EGL_BAD_SURFACE:
+      return "EGL_BAD_SURFACE";
+    case EGL_BAD_MATCH:
+      return "EGL_BAD_MATCH";
+    case EGL_BAD_PARAMETER:
+      return "EGL_BAD_PARAMETER";
+    case EGL_BAD_NATIVE_PIXMAP:
+      return "EGL_BAD_NATIVE_PIXMAP";
+    case EGL_BAD_NATIVE_WINDOW:
+      return "EGL_BAD_NATIVE_WINDOW";
+    case EGL_CONTEXT_LOST:
+      return "EGL_CONTEXT_LOST";
+    default:
+      return "UNKNOWN_EGL_ERROR";
+  }
+}
+
+void LogEGLFailure(const char* action) {
+  const EGLint error = eglGetError();
+  std::cerr << action << ": " << GetEGLErrorName(error) << " (0x" << std::hex
+            << error << std::dec << ")" << std::endl;
+}
+
+void RetainEGLDisplay(EGLDisplay display) {
+  std::lock_guard<std::mutex> lock(egl_display_ref_counts_mutex);
+  ++egl_display_ref_counts[display];
+}
+
+void ReleaseEGLDisplay(EGLDisplay display) {
+  bool should_terminate = false;
+  {
+    std::lock_guard<std::mutex> lock(egl_display_ref_counts_mutex);
+    auto it = egl_display_ref_counts.find(display);
+    if (it == egl_display_ref_counts.end()) {
+      return;
+    }
+    if (it->second <= 1) {
+      egl_display_ref_counts.erase(it);
+      should_terminate = true;
+    } else {
+      --it->second;
+    }
+  }
+
+  if (should_terminate && !eglTerminate(display)) {
+    LogEGLFailure("Failed to terminate EGL display");
+  }
+}
+
+}  // namespace
 
 EGLContextWrapper::EGLContextWrapper(napi_env env,
                                      const GLContextOptions& context_options)
@@ -37,7 +117,8 @@ EGLContextWrapper::EGLContextWrapper(napi_env env,
       drawing_buffer_height(0),
       drawing_buffer_format(GL_RGBA8),
       client_major_es_version(0),
-      client_minor_es_version(0) {
+      client_minor_es_version(0),
+      display_ref_retained_(false) {
   InitEGL(env, context_options);
   BindProcAddresses();
   RefreshGLVersion();
@@ -87,6 +168,8 @@ void EGLContextWrapper::InitEGL(napi_env env,
     NAPI_THROW_ERROR(env, "Could not initialize display");
     return;
   }
+  RetainEGLDisplay(display);
+  display_ref_retained_ = true;
 
   egl_extensions = std::unique_ptr<GLExtensionsWrapper>(
       new GLExtensionsWrapper(eglQueryString(display, EGL_EXTENSIONS)));
@@ -741,33 +824,53 @@ void EGLContextWrapper::RefreshGLExtensions() {
           glGetString(GL_REQUESTABLE_EXTENSIONS_ANGLE))));
 }
 
-EGLContextWrapper::~EGLContextWrapper() {
-  if (display != EGL_NO_DISPLAY) {
-    eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+void EGLContextWrapper::Destroy() {
+  if (display == EGL_NO_DISPLAY) {
+    return;
+  }
+
+  const bool context_is_current = context != EGL_NO_CONTEXT &&
+                                  eglGetCurrentDisplay() == display &&
+                                  eglGetCurrentContext() == context;
+  if (context_is_current) {
+    if (glFinish != nullptr) {
+      glFinish();
+    }
+    if (!eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE,
+                        EGL_NO_CONTEXT)) {
+      LogEGLFailure("Failed to release current EGL context");
+    }
   }
 
   if (surface != EGL_NO_SURFACE) {
     if (!eglDestroySurface(display, surface)) {
-      std::cerr << "Failed to delete EGL surface: " << std::endl;
+      LogEGLFailure("Failed to delete EGL surface");
     }
     surface = EGL_NO_SURFACE;
   }
 
   if (context != EGL_NO_CONTEXT) {
     if (!eglDestroyContext(display, context)) {
-      std::cerr << "Failed to delete EGL context: " << std::endl;
+      LogEGLFailure("Failed to delete EGL context");
     }
     context = EGL_NO_CONTEXT;
   }
 
-  if (display != EGL_NO_DISPLAY) {
-    eglTerminate(display);
-    display = EGL_NO_DISPLAY;
+  if (display_ref_retained_) {
+    ReleaseEGLDisplay(display);
+    display_ref_retained_ = false;
   }
+  display = EGL_NO_DISPLAY;
+  config = nullptr;
+  drawing_buffer_width = 0;
+  drawing_buffer_height = 0;
+  drawing_buffer_format = GL_RGBA8;
 
   // TODO(kreeger): Close context attributes.
   // TODO(kreeger): Cleanup global objects.
 }
+
+EGLContextWrapper::~EGLContextWrapper() { Destroy(); }
 
 EGLContextWrapper* EGLContextWrapper::Create(
     napi_env env, const GLContextOptions& context_options) {

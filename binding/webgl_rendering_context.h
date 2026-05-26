@@ -49,10 +49,12 @@ class WebGLRenderingContext {
   static napi_status Register(napi_env env, napi_value exports);
   static napi_status NewInstance(napi_env env, napi_value* instance,
                                  napi_callback_info info);
+  bool HasNativeResources() const;
 
  private:
   WebGLRenderingContext(napi_env env, GLContextOptions opts);
   ~WebGLRenderingContext();
+  void DestroyNativeResources();
 
   static napi_value InitInternal(napi_env env, napi_callback_info info);
   static void Cleanup(napi_env env, void* native, void* hint);
@@ -130,6 +132,8 @@ class WebGLRenderingContext {
   static napi_value DeleteTransformFeedback(napi_env env,
                                             napi_callback_info info);
   static napi_value DeleteVertexArray(napi_env env, napi_callback_info info);
+  static napi_value Destroy(napi_env env, napi_callback_info info);
+  static napi_value Dispose(napi_env env, napi_callback_info info);
   static napi_value DepthFunc(napi_env env, napi_callback_info info);
   static napi_value DepthMask(napi_env env, napi_callback_info info);
   static napi_value DepthRange(napi_env env, napi_callback_info info);

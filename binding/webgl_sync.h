@@ -43,6 +43,11 @@ napi_status WrapGLsync(napi_env env, GLsync &sync,
 napi_status GetGLsyncHandle(napi_env env, napi_value value,
                             GLSyncHandle **handle);
 
+// Invalidates JS WebGLSync wrappers for a context that is being destroyed. The
+// EGL context destruction releases the native sync objects.
+void InvalidateGLSyncHandlesForContext(napi_env env,
+                                       EGLContextWrapper *egl_context_wrapper);
+
 }  // namespace nodejsgl
 
 #endif  // NODEJS_GL_WEBGL_SYNC_H_
