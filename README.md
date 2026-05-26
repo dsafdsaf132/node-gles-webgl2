@@ -2,9 +2,9 @@
 
 Headless WebGL2 / OpenGL ES 3 runtime for Node.js backed by ANGLE.
 
-This package is a fork of `node-gles`. It preserves the existing WebGL1 surface
-and exposes additional GLES3-backed APIs through WebGL2-compatible JavaScript
-method names.
+This package is a fork of [`node-gles`](https://github.com/google/node-gles). It
+preserves the existing WebGL1 surface and exposes additional GLES3-backed APIs
+through WebGL2-compatible JavaScript method names.
 
 ## Install
 
@@ -77,9 +77,10 @@ sudo apt-get install -y build-essential python3 libx11-dev
 ## License
 
 This package is licensed under the Apache License, Version 2.0. See
-`LICENSE` for the full license text.
+[LICENSE](LICENSE) for the full license text.
 
-`node-gles-webgl2` is a fork of `node-gles`. Original source files retain their
-upstream copyright notices, including Google LLC / Google Inc. notices where
-applicable. Modifications in this repository add WebGL2 / OpenGL ES 3 bindings,
-packaging, CI, and publishing workflows for `node-gles-webgl2`.
+`node-gles-webgl2` is a fork of
+[`node-gles`](https://github.com/google/node-gles). Original source files retain
+their upstream copyright notices, including Google LLC / Google Inc. notices
+where applicable. Modifications in this repository add WebGL2 / OpenGL ES 3
+bindings, packaging, CI, and publishing workflows for `node-gles-webgl2`.
