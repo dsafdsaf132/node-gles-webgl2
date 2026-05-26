@@ -1215,7 +1215,6 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
       GL_BROWSER_DEFAULT_WEBGL;
   supports_webgl2_pixel_store_ =
       eglContextWrapper_->client_major_es_version >= 3;
-  synthetic_error_ = GL_NO_ERROR;
   alloc_count_ = 0;
 }
 
@@ -4915,9 +4914,10 @@ napi_value WebGLRenderingContext::GetError(napi_env env,
   nstatus = GetContext(env, info, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  GLenum error = context->synthetic_error_;
-  if (error != GL_NO_ERROR) {
-    context->synthetic_error_ = GL_NO_ERROR;
+  GLenum error = GL_NO_ERROR;
+  if (!context->pending_errors_.empty()) {
+    error = context->pending_errors_.front();
+    context->pending_errors_.pop_front();
   } else {
     error = context->eglContextWrapper_->glGetError();
   }
@@ -7766,9 +7766,12 @@ napi_value WebGLRenderingContext::PixelStorei(napi_env env,
 
   if (IsWebGLOnlyPixelStoreParameter(pname)) {
     if (!IsValidWebGLOnlyPixelStoreValue(pname, param)) {
-      if (context->synthetic_error_ == GL_NO_ERROR) {
-        context->synthetic_error_ = GL_INVALID_VALUE;
+      GLenum native_error = GL_NO_ERROR;
+      while ((native_error = context->eglContextWrapper_->glGetError()) !=
+             GL_NO_ERROR) {
+        context->pending_errors_.push_back(native_error);
       }
+      context->pending_errors_.push_back(GL_INVALID_VALUE);
       return nullptr;
     }
     UpdateWebGLOnlyPixelStoreState(&context->pixel_store_state_, pname, param);

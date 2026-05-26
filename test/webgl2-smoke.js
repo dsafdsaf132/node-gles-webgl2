@@ -108,6 +108,8 @@ function testWebGLOnlyPixelStore(gl) {
       gl.BROWSER_DEFAULT_WEBGL);
 
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 1234);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 5678);
+  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
   assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
   assert.strictEqual(
       gl.getParameter(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL),
