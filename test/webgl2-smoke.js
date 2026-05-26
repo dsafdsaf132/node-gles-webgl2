@@ -128,6 +128,48 @@ function testWebGLOnlyPixelStore(gl) {
   assert.strictEqual(gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), false);
 }
 
+function testUnsupportedWebGLUnpackUploadGuard(gl) {
+  const pixel2D = new Uint8Array([255, 0, 0, 255]);
+  const texture2D = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixel2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixel2D);
+  assertNoError(gl, "texImage2D without WebGL unpack transform");
+
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA,
+                   gl.UNSIGNED_BYTE, pixel2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+
+  const pixel3D = new Uint8Array([0, 255, 0, 255]);
+  const texture3D = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, texture3D);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 1, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixel3D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,
+                 gl.BROWSER_DEFAULT_WEBGL);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 1, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  assertNoError(gl, "texImage3D allocation without WebGL unpack transform");
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 1, 1, 1, gl.RGBA,
+                   gl.UNSIGNED_BYTE, pixel3D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+}
+
 function testVertexArrayState(gl) {
   const vao = gl.createVertexArray();
   const buffer = gl.createBuffer();
@@ -219,6 +261,7 @@ const gl = createContext();
 console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
 testWebGLOnlyPixelStore(gl);
+testUnsupportedWebGLUnpackUploadGuard(gl);
 testVertexArrayState(gl);
 testInstancedDrawing(gl, false);
 testInstancedDrawing(gl, true);

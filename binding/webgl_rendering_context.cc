@@ -1186,6 +1186,24 @@ static bool IsValidWebGLOnlyPixelStoreValue(GLenum pname, GLint param) {
   }
 }
 
+static bool HasUnsupportedWebGLUnpackTransform(
+    const PixelStoreState &pixel_store_state) {
+  return pixel_store_state.unpack_flip_y_webgl ||
+         pixel_store_state.unpack_premultiply_alpha_webgl ||
+         pixel_store_state.unpack_colorspace_conversion_webgl !=
+             GL_BROWSER_DEFAULT_WEBGL;
+}
+
+static void QueueWebGLError(EGLContextWrapper *wrapper,
+                            std::deque<GLenum> *pending_errors,
+                            GLenum error) {
+  GLenum native_error = GL_NO_ERROR;
+  while ((native_error = wrapper->glGetError()) != GL_NO_ERROR) {
+    pending_errors->push_back(native_error);
+  }
+  pending_errors->push_back(error);
+}
+
 napi_ref WebGLRenderingContext::constructor_ref_;
 
 WebGLRenderingContext::WebGLRenderingContext(napi_env env,
@@ -7766,12 +7784,8 @@ napi_value WebGLRenderingContext::PixelStorei(napi_env env,
 
   if (IsWebGLOnlyPixelStoreParameter(pname)) {
     if (!IsValidWebGLOnlyPixelStoreValue(pname, param)) {
-      GLenum native_error = GL_NO_ERROR;
-      while ((native_error = context->eglContextWrapper_->glGetError()) !=
-             GL_NO_ERROR) {
-        context->pending_errors_.push_back(native_error);
-      }
-      context->pending_errors_.push_back(GL_INVALID_VALUE);
+      QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                      GL_INVALID_VALUE);
       return nullptr;
     }
     UpdateWebGLOnlyPixelStoreState(&context->pixel_store_state_, pname, param);
@@ -8159,6 +8173,7 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
   GLenum format;
   GLint type;
   ArrayLikeBuffer alb;
+  bool has_source_data = false;
 
   // texImage2D has a WebGL1 API that only takes 6 args intead of 9. This
   // argument is in place to allow the user to pass an HTML element. Handle
@@ -8212,6 +8227,7 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
 
     nstatus = GetArrayLikeBuffer(env, data_value, &alb);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    has_source_data = true;
   } else {
     // If argc is not 6, it should match arguments for OpenGL ES API.
     ENSURE_ARGC_RETVAL(env, argc, 9, nullptr);
@@ -8247,6 +8263,7 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
     if (value_type != napi_null && value_type != napi_undefined) {
       nstatus = GetArrayLikeBuffer(env, args[8], &alb);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      has_source_data = true;
     }
   }
 
@@ -8265,6 +8282,13 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+  if (has_source_data &&
+      HasUnsupportedWebGLUnpackTransform(context->pixel_store_state_)) {
+    QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                    GL_INVALID_OPERATION);
+    return nullptr;
+  }
 
   context->eglContextWrapper_->glTexImage2D(target, level, internal_format,
                                             width, height, border, format, type,
@@ -8333,6 +8357,8 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
   napi_valuetype value_type;
   nstatus = napi_typeof(env, args[9], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  bool has_source_data =
+      value_type != napi_null && value_type != napi_undefined;
   if (value_type == napi_number) {
     if (argc == 11) {
       NAPI_THROW_ERROR(env, "texImage3D srcOffset requires ArrayBufferView data");
@@ -8365,6 +8391,13 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   } else if (argc == 11) {
     NAPI_THROW_ERROR(env, "texImage3D srcOffset requires ArrayBufferView data");
+    return nullptr;
+  }
+
+  if (has_source_data &&
+      HasUnsupportedWebGLUnpackTransform(context->pixel_store_state_)) {
+    QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                    GL_INVALID_OPERATION);
     return nullptr;
   }
 
@@ -8756,6 +8789,12 @@ napi_value WebGLRenderingContext::TexSubImage2D(napi_env env,
   nstatus = GetArrayLikeBuffer(env, args[8], &alb);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  if (HasUnsupportedWebGLUnpackTransform(context->pixel_store_state_)) {
+    QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                    GL_INVALID_OPERATION);
+    return nullptr;
+  }
+
   context->eglContextWrapper_->glTexSubImage2D(
       target, level, xoffset, yoffset, width, height, format, type, alb.data);
 
@@ -8856,6 +8895,12 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
         env, context->pixel_store_state_, false, width, height, depth, format,
         type, static_cast<size_t>(byte_length), "srcData");
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
+  if (HasUnsupportedWebGLUnpackTransform(context->pixel_store_state_)) {
+    QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                    GL_INVALID_OPERATION);
+    return nullptr;
   }
 
   ENSURE_GL_PROC_RETVAL(env, context, glTexSubImage3D, nullptr);
