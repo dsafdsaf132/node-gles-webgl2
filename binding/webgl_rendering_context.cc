@@ -1115,6 +1115,26 @@ static PixelStoreState GetEffectiveUnpackPixelStoreState(
   return effective_state;
 }
 
+static napi_status QueueInsufficientPixelDataIfNeeded(
+    napi_env env, EGLContextWrapper *wrapper,
+    std::deque<GLenum> *pending_errors,
+    const PixelStoreState &pixel_store_state, GLsizei width, GLsizei height,
+    GLsizei depth, GLenum format, GLenum type, size_t available_byte_count,
+    bool *insufficient) {
+  *insufficient = false;
+  size_t required_byte_count = 0;
+  napi_status nstatus = GetRequiredPixelDataByteCount(
+      env, pixel_store_state, false, width, height, depth, format, type,
+      &required_byte_count);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (required_byte_count > available_byte_count) {
+    QueueWebGLError(wrapper, pending_errors, GL_INVALID_OPERATION);
+    *insufficient = true;
+  }
+  return napi_ok;
+}
+
 struct UnpackPixelLayout {
   size_t bytes_per_pixel;
   size_t source_row_stride;
@@ -1223,6 +1243,20 @@ static napi_status GetUnpackPixelLayout(
 }
 
 static bool IsPremultiplyFormat(GLenum format, GLenum type) {
+  if (format == GL_RGBA_INTEGER) {
+    switch (type) {
+    case GL_UNSIGNED_BYTE:
+    case GL_BYTE:
+    case GL_UNSIGNED_SHORT:
+    case GL_SHORT:
+    case GL_UNSIGNED_INT:
+    case GL_INT:
+      return true;
+    default:
+      return false;
+    }
+  }
+
   switch (format) {
   case GL_LUMINANCE_ALPHA:
   case GL_RGBA:
@@ -1639,11 +1673,31 @@ static napi_status PrepareWebGLUnpackUpload(
     }
   }
 
+  if (source_kind == TextureUploadSourceKind::kMemory &&
+      source_data != nullptr) {
+    bool insufficient = false;
+    napi_status nstatus = QueueInsufficientPixelDataIfNeeded(
+        env, wrapper, pending_errors, effective_pixel_store_state, width,
+        height, depth, format, type, source_byte_count, &insufficient);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+    if (insufficient) {
+      prepared->skip_upload = true;
+      return napi_ok;
+    }
+  }
+
   if (source_kind == TextureUploadSourceKind::kNone ||
       (source_kind == TextureUploadSourceKind::kMemory &&
        source_data == nullptr) ||
       !NeedsWebGLUnpackStaging(effective_pixel_store_state, height, format,
                                type)) {
+    return napi_ok;
+  }
+
+  size_t bytes_per_pixel = 0;
+  if (!GetPixelBytesPerPixel(format, type, &bytes_per_pixel)) {
+    QueueWebGLError(wrapper, pending_errors, GL_INVALID_ENUM);
+    prepared->skip_upload = true;
     return napi_ok;
   }
 

@@ -88,6 +88,20 @@ function readTexture2DPixel(gl, texture, x, y) {
   return pixel;
 }
 
+function readTexture2DIntegerPixel(gl, texture, x, y) {
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(x, y, 1, 1, gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, pixel);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(framebuffer);
+  return pixel;
+}
+
 function readTextureLayerPixel(gl, texture, layer, x, y) {
   const framebuffer = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -221,6 +235,27 @@ function testWebGLUnpackTransforms(gl) {
   gl.pixelStorei(gl.UNPACK_SKIP_IMAGES, 0);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
 
+  const undersizedSourceTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, undersizedSourceTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, new Uint8Array([1, 2, 3, 4]), 1);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  assertNoError(gl, "texImage2D null allocation after undersized srcData");
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA,
+                   gl.UNSIGNED_BYTE, new Uint8Array([1, 2, 3, 4]), 1);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  assert.doesNotThrow(() => {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 2, 0, 0xdead,
+                  gl.UNSIGNED_BYTE, new Uint8Array(8));
+  });
+  assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
   const pboTexture2D = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, pboTexture2D);
   configureTexture(gl, gl.TEXTURE_2D);
@@ -315,6 +350,18 @@ function testWebGLUnpackTransforms(gl) {
   assertPixelNear(
       readTexture2DPixel(gl, premultiplyTexture, 0, 0),
       [50, 25, 13, 128], "texImage2D UNPACK_PREMULTIPLY_ALPHA_WEBGL");
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+
+  const integerPremultiplyTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, integerPremultiplyTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
+  gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA8UI, 1, 1, 0, gl.RGBA_INTEGER,
+      gl.UNSIGNED_BYTE, new Uint8Array([100, 50, 25, 128]));
+  assert.deepStrictEqual(
+      Array.from(readTexture2DIntegerPixel(gl, integerPremultiplyTexture, 0, 0)),
+      [50, 25, 13, 128]);
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
 
   const subTexture = gl.createTexture();
