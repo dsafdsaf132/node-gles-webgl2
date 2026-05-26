@@ -161,6 +161,12 @@ function testLoseContextApi() {
   gl.clearColor(0, 0, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   assertNoError(gl, "context before loseContext");
+  Object.defineProperty(gl, "destroy", {
+    configurable: true,
+    value: () => {
+      throw new Error("loseContext must not call mutable gl.destroy");
+    }
+  });
   assert.doesNotThrow(() => ext.loseContext());
   assert.strictEqual(gl.isContextLost(), true, "isContextLost should be true after loseContext");
   assert.throws(() => gl.clear(gl.COLOR_BUFFER_BIT), /destroyed/,

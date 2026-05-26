@@ -21,6 +21,7 @@
 #include "angle/include/GLES2/gl2ext.h"
 
 #include "utils.h"
+#include "webgl_rendering_context.h"
 
 namespace nodejsgl {
 
@@ -966,17 +967,8 @@ napi_value WebGLLoseContextExtension::LoseContext(napi_env env,
     return nullptr;  // Context was already GC'd.
   }
 
-  // Call gl.destroy() so EGL resources are released immediately rather than
-  // waiting for garbage collection.
-  napi_value destroy_fn = nullptr;
-  nstatus = napi_get_named_property(env, context_value, "destroy", &destroy_fn);
-  if (nstatus != napi_ok) return nullptr;
-
-  napi_valuetype fn_type = napi_undefined;
-  nstatus = napi_typeof(env, destroy_fn, &fn_type);
-  if (nstatus == napi_ok && fn_type == napi_function) {
-    napi_call_function(env, context_value, destroy_fn, 0, nullptr, nullptr);
-  }
+  nstatus = WebGLRenderingContext::DestroyContextObject(env, context_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   return nullptr;
 }
