@@ -21,6 +21,7 @@
 #include "angle/include/GLES2/gl2ext.h"
 
 #include "utils.h"
+#include "webgl_rendering_context.h"
 
 namespace nodejsgl {
 
@@ -859,6 +860,13 @@ napi_ref WebGLLoseContextExtension::constructor_ref_;
 WebGLLoseContextExtension::WebGLLoseContextExtension(napi_env env)
     : GLExtensionBase(env) {}
 
+WebGLLoseContextExtension::~WebGLLoseContextExtension() {
+  if (context_ref_ != nullptr) {
+    napi_delete_reference(env_, context_ref_);
+    context_ref_ = nullptr;
+  }
+}
+
 /* static */
 bool WebGLLoseContextExtension::IsSupported(
     EGLContextWrapper* egl_context_wrapper) {
@@ -895,6 +903,21 @@ napi_status WebGLLoseContextExtension::NewInstance(
 }
 
 /* static */
+void WebGLLoseContextExtension::SetContextRef(napi_env env, napi_value instance,
+                                              napi_value context_js_value) {
+  WebGLLoseContextExtension* ext = nullptr;
+  napi_unwrap(env, instance, reinterpret_cast<void**>(&ext));
+  if (ext == nullptr || context_js_value == nullptr) {
+    return;
+  }
+  if (ext->context_ref_ != nullptr) {
+    napi_delete_reference(env, ext->context_ref_);
+  }
+  // Weak reference (count=0): the extension does not prevent the context GC.
+  napi_create_reference(env, context_js_value, 0, &ext->context_ref_);
+}
+
+/* static */
 napi_value WebGLLoseContextExtension::InitInternal(napi_env env,
                                                    napi_callback_info info) {
   napi_status nstatus;
@@ -925,7 +948,28 @@ void WebGLLoseContextExtension::Cleanup(napi_env env, void* native,
 /* static */
 napi_value WebGLLoseContextExtension::LoseContext(napi_env env,
                                                   napi_callback_info info) {
-  // Pure stub extension - no-op.
+  napi_value js_this;
+  napi_status nstatus =
+      napi_get_cb_info(env, info, nullptr, nullptr, &js_this, nullptr);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+  WebGLLoseContextExtension* ext = nullptr;
+  nstatus = napi_unwrap(env, js_this, reinterpret_cast<void**>(&ext));
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+  if (ext == nullptr || ext->context_ref_ == nullptr) {
+    return nullptr;
+  }
+
+  napi_value context_value = nullptr;
+  nstatus = napi_get_reference_value(env, ext->context_ref_, &context_value);
+  if (nstatus != napi_ok || context_value == nullptr) {
+    return nullptr;  // Context was already GC'd.
+  }
+
+  nstatus = WebGLRenderingContext::DestroyContextObject(env, context_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
   return nullptr;
 }
 

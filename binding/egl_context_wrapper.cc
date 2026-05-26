@@ -824,21 +824,70 @@ void EGLContextWrapper::RefreshGLExtensions() {
           glGetString(GL_REQUESTABLE_EXTENSIONS_ANGLE))));
 }
 
+bool EGLContextWrapper::IsCurrent() const {
+  return display != EGL_NO_DISPLAY && context != EGL_NO_CONTEXT &&
+         eglGetCurrentDisplay() == display && eglGetCurrentContext() == context;
+}
+
+bool EGLContextWrapper::MakeCurrent() const {
+  return display != EGL_NO_DISPLAY && context != EGL_NO_CONTEXT &&
+         surface != EGL_NO_SURFACE &&
+         eglMakeCurrent(display, surface, surface, context);
+}
+
+void EGLContextWrapper::FlushPendingSyncDeletes() {
+  if (glDeleteSync == nullptr) {
+    pending_sync_deletes.clear();
+    return;
+  }
+  for (GLsync sync : pending_sync_deletes) {
+    if (sync != nullptr) {
+      glDeleteSync(sync);
+    }
+  }
+  pending_sync_deletes.clear();
+}
+
 void EGLContextWrapper::Destroy() {
   if (display == EGL_NO_DISPLAY) {
     return;
   }
 
-  const bool context_is_current = context != EGL_NO_CONTEXT &&
-                                  eglGetCurrentDisplay() == display &&
-                                  eglGetCurrentContext() == context;
+  const EGLDisplay previous_display = eglGetCurrentDisplay();
+  const EGLSurface previous_draw_surface = eglGetCurrentSurface(EGL_DRAW);
+  const EGLSurface previous_read_surface = eglGetCurrentSurface(EGL_READ);
+  const EGLContext previous_context = eglGetCurrentContext();
+  const bool context_is_current = IsCurrent();
   if (context_is_current) {
     if (glFinish != nullptr) {
       glFinish();
     }
+    FlushPendingSyncDeletes();
     if (!eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE,
                         EGL_NO_CONTEXT)) {
       LogEGLFailure("Failed to release current EGL context");
+    }
+  } else if (!pending_sync_deletes.empty() && context != EGL_NO_CONTEXT &&
+             surface != EGL_NO_SURFACE) {
+    // Context not current: temporarily bind it to delete deferred syncs.
+    if (MakeCurrent()) {
+      FlushPendingSyncDeletes();
+      const EGLDisplay restore_display =
+          previous_display != EGL_NO_DISPLAY ? previous_display : display;
+      const EGLSurface restore_draw_surface = previous_context != EGL_NO_CONTEXT
+                                                  ? previous_draw_surface
+                                                  : EGL_NO_SURFACE;
+      const EGLSurface restore_read_surface = previous_context != EGL_NO_CONTEXT
+                                                  ? previous_read_surface
+                                                  : EGL_NO_SURFACE;
+      if (!eglMakeCurrent(restore_display, restore_draw_surface,
+                          restore_read_surface, previous_context)) {
+        LogEGLFailure("Failed to restore previous EGL context");
+        eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+      }
+    } else {
+      // Cannot bind; EGL will free the syncs when the context is destroyed.
+      pending_sync_deletes.clear();
     }
   }
 

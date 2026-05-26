@@ -64,11 +64,54 @@ bool IsRegisteredGLSyncHandle(GLSyncHandle* handle) {
   return false;
 }
 
+struct EGLCurrentBinding {
+  EGLDisplay display;
+  EGLSurface draw_surface;
+  EGLSurface read_surface;
+  EGLContext context;
+};
+
+EGLCurrentBinding GetCurrentEGLBinding() {
+  return EGLCurrentBinding{
+      eglGetCurrentDisplay(), eglGetCurrentSurface(EGL_DRAW),
+      eglGetCurrentSurface(EGL_READ), eglGetCurrentContext()};
+}
+
+bool RestoreEGLBinding(const EGLCurrentBinding& binding,
+                       EGLDisplay fallback_display) {
+  const EGLDisplay display =
+      binding.display != EGL_NO_DISPLAY ? binding.display : fallback_display;
+  const EGLSurface draw_surface =
+      binding.context != EGL_NO_CONTEXT ? binding.draw_surface : EGL_NO_SURFACE;
+  const EGLSurface read_surface =
+      binding.context != EGL_NO_CONTEXT ? binding.read_surface : EGL_NO_SURFACE;
+  return display != EGL_NO_DISPLAY &&
+         eglMakeCurrent(display, draw_surface, read_surface, binding.context);
+}
+
 }  // namespace
 
 static void DeleteGLsync(EGLContextWrapper* egl_context_wrapper, GLsync* sync) {
   if (sync == nullptr || *sync == nullptr || egl_context_wrapper == nullptr ||
       egl_context_wrapper->glDeleteSync == nullptr) {
+    return;
+  }
+  if (!egl_context_wrapper->IsCurrent()) {
+    const EGLCurrentBinding previous_binding = GetCurrentEGLBinding();
+    if (egl_context_wrapper->MakeCurrent()) {
+      egl_context_wrapper->glDeleteSync(*sync);
+      *sync = nullptr;
+      if (!RestoreEGLBinding(previous_binding, egl_context_wrapper->display)) {
+        eglMakeCurrent(egl_context_wrapper->display, EGL_NO_SURFACE,
+                       EGL_NO_SURFACE, EGL_NO_CONTEXT);
+      }
+      return;
+    }
+
+    // Last-resort fallback: if the owner context cannot be rebound, the EGL
+    // context teardown will release this sync after flushing queued handles.
+    egl_context_wrapper->pending_sync_deletes.push_back(*sync);
+    *sync = nullptr;
     return;
   }
   egl_context_wrapper->glDeleteSync(*sync);

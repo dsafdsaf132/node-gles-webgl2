@@ -1972,6 +1972,21 @@ bool WebGLRenderingContext::HasNativeResources() const {
   return eglContextWrapper_ != nullptr;
 }
 
+/* static */
+napi_status WebGLRenderingContext::DestroyContextObject(
+    napi_env env, napi_value context_value) {
+  ENSURE_VALUE_IS_OBJECT_RETVAL(env, context_value, napi_invalid_arg);
+
+  WebGLRenderingContext *context = nullptr;
+  napi_status nstatus =
+      napi_unwrap(env, context_value, reinterpret_cast<void **>(&context));
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  if (context != nullptr) {
+    context->DestroyNativeResources();
+  }
+  return napi_ok;
+}
+
 void WebGLRenderingContext::DestroyNativeResources() {
   if (eglContextWrapper_) {
     InvalidateGLSyncHandlesForContext(env_, eglContextWrapper_);
@@ -5116,12 +5131,8 @@ napi_value WebGLRenderingContext::Destroy(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_VALUE_IS_OBJECT_RETVAL(env, js_this, nullptr);
 
-  WebGLRenderingContext *context = nullptr;
-  nstatus = napi_unwrap(env, js_this, reinterpret_cast<void **>(&context));
+  nstatus = DestroyContextObject(env, js_this);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (context != nullptr) {
-    context->DestroyNativeResources();
-  }
   return nullptr;
 }
 
@@ -6171,6 +6182,9 @@ napi_value WebGLRenderingContext::GetExtension(napi_env env,
              WebGLLoseContextExtension::IsSupported(egl_ctx)) {
     nstatus =
         WebGLLoseContextExtension::NewInstance(env, &webgl_extension, egl_ctx);
+    if (nstatus == napi_ok) {
+      WebGLLoseContextExtension::SetContextRef(env, webgl_extension, js_this);
+    }
   } else {
     fprintf(stderr, "Unsupported extension: %s\n", name);
     nstatus = napi_get_null(env, &webgl_extension);
