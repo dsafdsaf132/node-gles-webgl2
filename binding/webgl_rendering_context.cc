@@ -1174,6 +1174,18 @@ static void UpdateWebGLOnlyPixelStoreState(PixelStoreState *state,
   }
 }
 
+static bool IsValidWebGLOnlyPixelStoreValue(GLenum pname, GLint param) {
+  switch (pname) {
+  case GL_UNPACK_FLIP_Y_WEBGL:
+  case GL_UNPACK_PREMULTIPLY_ALPHA_WEBGL:
+    return param == 0 || param == 1;
+  case GL_UNPACK_COLORSPACE_CONVERSION_WEBGL:
+    return param == GL_BROWSER_DEFAULT_WEBGL || param == GL_NONE;
+  default:
+    return false;
+  }
+}
+
 napi_ref WebGLRenderingContext::constructor_ref_;
 
 WebGLRenderingContext::WebGLRenderingContext(napi_env env,
@@ -1203,6 +1215,7 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
       GL_BROWSER_DEFAULT_WEBGL;
   supports_webgl2_pixel_store_ =
       eglContextWrapper_->client_major_es_version >= 3;
+  synthetic_error_ = GL_NO_ERROR;
   alloc_count_ = 0;
 }
 
@@ -4902,7 +4915,12 @@ napi_value WebGLRenderingContext::GetError(napi_env env,
   nstatus = GetContext(env, info, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  GLenum error = context->eglContextWrapper_->glGetError();
+  GLenum error = context->synthetic_error_;
+  if (error != GL_NO_ERROR) {
+    context->synthetic_error_ = GL_NO_ERROR;
+  } else {
+    error = context->eglContextWrapper_->glGetError();
+  }
 
   napi_value error_value;
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -5492,20 +5510,42 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
   }
 
   case GL_PACK_ALIGNMENT:
-  case GL_PACK_ROW_LENGTH:
-  case GL_PACK_SKIP_ROWS:
-  case GL_PACK_SKIP_PIXELS:
-  case GL_UNPACK_ALIGNMENT:
-  case GL_UNPACK_ROW_LENGTH:
-  case GL_UNPACK_SKIP_ROWS:
-  case GL_UNPACK_SKIP_PIXELS:
-  case GL_UNPACK_IMAGE_HEIGHT:
-  case GL_UNPACK_SKIP_IMAGES: {
+  case GL_UNPACK_ALIGNMENT: {
     GLint value = 0;
     switch (name) {
     case GL_PACK_ALIGNMENT:
       value = context->pixel_store_state_.pack_alignment;
       break;
+    case GL_UNPACK_ALIGNMENT:
+      value = context->pixel_store_state_.unpack_alignment;
+      break;
+    }
+
+    napi_value js_value;
+    nstatus = napi_create_int32(env, value, &js_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return js_value;
+  }
+
+  case GL_PACK_ROW_LENGTH:
+  case GL_PACK_SKIP_ROWS:
+  case GL_PACK_SKIP_PIXELS:
+  case GL_UNPACK_ROW_LENGTH:
+  case GL_UNPACK_SKIP_ROWS:
+  case GL_UNPACK_SKIP_PIXELS:
+  case GL_UNPACK_IMAGE_HEIGHT:
+  case GL_UNPACK_SKIP_IMAGES: {
+    if (!context->supports_webgl2_pixel_store_) {
+      GLint params = 0;
+      context->eglContextWrapper_->glGetIntegerv(name, &params);
+      napi_value params_value;
+      nstatus = napi_create_int32(env, params, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    GLint value = 0;
+    switch (name) {
     case GL_PACK_ROW_LENGTH:
       value = context->pixel_store_state_.pack_row_length;
       break;
@@ -5514,9 +5554,6 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
       break;
     case GL_PACK_SKIP_PIXELS:
       value = context->pixel_store_state_.pack_skip_pixels;
-      break;
-    case GL_UNPACK_ALIGNMENT:
-      value = context->pixel_store_state_.unpack_alignment;
       break;
     case GL_UNPACK_ROW_LENGTH:
       value = context->pixel_store_state_.unpack_row_length;
@@ -7728,6 +7765,12 @@ napi_value WebGLRenderingContext::PixelStorei(napi_env env,
   }
 
   if (IsWebGLOnlyPixelStoreParameter(pname)) {
+    if (!IsValidWebGLOnlyPixelStoreValue(pname, param)) {
+      if (context->synthetic_error_ == GL_NO_ERROR) {
+        context->synthetic_error_ = GL_INVALID_VALUE;
+      }
+      return nullptr;
+    }
     UpdateWebGLOnlyPixelStoreState(&context->pixel_store_state_, pname, param);
     return nullptr;
   }

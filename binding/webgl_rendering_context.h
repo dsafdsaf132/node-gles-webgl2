@@ -337,6 +337,7 @@ class WebGLRenderingContext {
   std::string unpack_color_space_;
   PixelStoreState pixel_store_state_;
   bool supports_webgl2_pixel_store_;
+  GLenum synthetic_error_;
 
   std::atomic<size_t> alloc_count_;
 };

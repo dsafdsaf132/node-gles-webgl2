@@ -1,6 +1,8 @@
 "use strict";
 
 const assert = require("assert");
+const {execFileSync} = require("child_process");
+const path = require("path");
 const nodeGles = require("..");
 
 function createContext() {
@@ -104,6 +106,20 @@ function testWebGLOnlyPixelStore(gl) {
   assert.strictEqual(
       gl.getParameter(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL),
       gl.BROWSER_DEFAULT_WEBGL);
+
+  gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, 1234);
+  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
+  assert.strictEqual(
+      gl.getParameter(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL),
+      gl.BROWSER_DEFAULT_WEBGL);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 2);
+  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
+  assert.strictEqual(gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), false);
+
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 2);
+  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
+  assert.strictEqual(gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), false);
 }
 
 function testVertexArrayState(gl) {
@@ -172,6 +188,27 @@ function testInstancedDrawing(gl, indexed) {
                               "drawArraysInstanced");
 }
 
+function testWebGL2PixelStoreIsGatedForES2() {
+  execFileSync(process.execPath, ["-e", `
+    const assert = require("assert");
+    const nodeGles = require(".");
+    const gl = nodeGles.createWebGLRenderingContext({
+      width: 1,
+      height: 1,
+      majorVersion: 2,
+      minorVersion: 0
+    });
+    const version = gl.getParameter(gl.VERSION);
+    if (/OpenGL ES 2\\./.test(version)) {
+      gl.getError();
+      gl.getParameter(gl.UNPACK_ROW_LENGTH);
+      const error = gl.getError();
+      assert(error === gl.NO_ERROR || error === gl.INVALID_ENUM,
+             "unexpected ES2 pixel-store query error " + error);
+    }
+  `], {cwd: path.resolve(__dirname, ".."), stdio: "pipe"});
+}
+
 const gl = createContext();
 console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
@@ -179,3 +216,4 @@ testWebGLOnlyPixelStore(gl);
 testVertexArrayState(gl);
 testInstancedDrawing(gl, false);
 testInstancedDrawing(gl, true);
+testWebGL2PixelStoreIsGatedForES2();
