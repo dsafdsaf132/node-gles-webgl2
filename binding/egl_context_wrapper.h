@@ -31,6 +31,7 @@
 #include <iostream>
 #include <memory>
 #include <string>
+#include <vector>
 
 namespace nodejsgl {
 
@@ -84,6 +85,11 @@ class EGLContextWrapper {
 
   bool ResizeSurface(napi_env env, uint32_t width, uint32_t height);
   void Destroy();
+  void FlushPendingSyncDeletes();
+
+  // GLsync objects that could not be deleted immediately (wrong context
+  // current at finalization time). Flushed during Destroy().
+  std::vector<GLsync> pending_sync_deletes;
 
   EGLContext context;
   EGLDisplay display;

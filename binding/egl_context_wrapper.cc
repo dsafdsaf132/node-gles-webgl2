@@ -824,6 +824,19 @@ void EGLContextWrapper::RefreshGLExtensions() {
           glGetString(GL_REQUESTABLE_EXTENSIONS_ANGLE))));
 }
 
+void EGLContextWrapper::FlushPendingSyncDeletes() {
+  if (glDeleteSync == nullptr) {
+    pending_sync_deletes.clear();
+    return;
+  }
+  for (GLsync sync : pending_sync_deletes) {
+    if (sync != nullptr) {
+      glDeleteSync(sync);
+    }
+  }
+  pending_sync_deletes.clear();
+}
+
 void EGLContextWrapper::Destroy() {
   if (display == EGL_NO_DISPLAY) {
     return;
@@ -836,9 +849,20 @@ void EGLContextWrapper::Destroy() {
     if (glFinish != nullptr) {
       glFinish();
     }
+    FlushPendingSyncDeletes();
     if (!eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE,
                         EGL_NO_CONTEXT)) {
       LogEGLFailure("Failed to release current EGL context");
+    }
+  } else if (!pending_sync_deletes.empty() && context != EGL_NO_CONTEXT &&
+             surface != EGL_NO_SURFACE) {
+    // Context not current: temporarily bind it to delete deferred syncs.
+    if (eglMakeCurrent(display, surface, surface, context)) {
+      FlushPendingSyncDeletes();
+      eglMakeCurrent(display, EGL_NO_SURFACE, EGL_NO_SURFACE, EGL_NO_CONTEXT);
+    } else {
+      // Cannot bind; EGL will free the syncs when the context is destroyed.
+      pending_sync_deletes.clear();
     }
   }
 
