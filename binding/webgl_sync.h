@@ -43,6 +43,9 @@ napi_status WrapGLsync(napi_env env, GLsync &sync,
 napi_status GetGLsyncHandle(napi_env env, napi_value value,
                             GLSyncHandle **handle);
 
+// Deletes a live GLsync using the context that created it.
+void DeleteGLSyncHandle(napi_env env, GLSyncHandle *handle);
+
 // Invalidates JS WebGLSync wrappers for a context that is being destroyed. The
 // EGL context destruction releases the native sync objects.
 void InvalidateGLSyncHandlesForContext(napi_env env,

@@ -27,6 +27,7 @@
 #include <iostream>
 #include <map>
 #include <mutex>
+#include <new>
 #include <vector>
 
 namespace nodejsgl {
@@ -118,11 +119,19 @@ EGLContextWrapper::EGLContextWrapper(napi_env env,
       drawing_buffer_format(GL_RGBA8),
       client_major_es_version(0),
       client_minor_es_version(0),
+      initialized_(false),
       display_ref_retained_(false) {
-  InitEGL(env, context_options);
+  if (!InitEGL(env, context_options)) {
+    return;
+  }
   BindProcAddresses();
+  if (glGetString == nullptr) {
+    NAPI_THROW_ERROR(env, "glGetString is not available");
+    return;
+  }
   RefreshGLVersion();
   RefreshGLExtensions();
+  initialized_ = true;
 
 #if DEBUG
   std::cerr << "** GL_EXTENSIONS:" << std::endl;
@@ -135,7 +144,7 @@ EGLContextWrapper::EGLContextWrapper(napi_env env,
 #endif
 }
 
-void EGLContextWrapper::InitEGL(napi_env env,
+bool EGLContextWrapper::InitEGL(napi_env env,
                                 const GLContextOptions& context_options) {
   std::vector<EGLAttrib> display_attributes;
   display_attributes.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
@@ -158,7 +167,7 @@ void EGLContextWrapper::InitEGL(napi_env env,
     display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
     if (display == EGL_NO_DISPLAY) {
       NAPI_THROW_ERROR(env, "No display");
-      return;
+      return false;
     }
   }
 
@@ -166,7 +175,7 @@ void EGLContextWrapper::InitEGL(napi_env env,
   EGLint minor;
   if (!eglInitialize(display, &major, &minor)) {
     NAPI_THROW_ERROR(env, "Could not initialize display");
-    return;
+    return false;
   }
   RetainEGLDisplay(display);
   display_ref_retained_ = true;
@@ -191,20 +200,20 @@ void EGLContextWrapper::InitEGL(napi_env env,
   EGLint num_config;
   if (!eglChooseConfig(display, attrib_list, &config, 1, &num_config)) {
     NAPI_THROW_ERROR(env, "Failed creating a config");
-    return;
+    return false;
   }
 
   eglBindAPI(EGL_OPENGL_ES_API);
   if (eglGetError() != EGL_SUCCESS) {
     NAPI_THROW_ERROR(env, "Failed to set OpenGL ES API");
-    return;
+    return false;
   }
 
   EGLint config_renderable_type;
   if (!eglGetConfigAttrib(display, config, EGL_RENDERABLE_TYPE,
                           &config_renderable_type)) {
     NAPI_THROW_ERROR(env, "Failed to get EGL_RENDERABLE_TYPE");
-    return;
+    return false;
   }
 
   // If the requested context is ES3 but the config cannot support ES3, request
@@ -242,7 +251,7 @@ void EGLContextWrapper::InitEGL(napi_env env,
                              context_attributes.data());
   if (context == EGL_NO_CONTEXT) {
     NAPI_THROW_ERROR(env, "Could not create context");
-    return;
+    return false;
   }
 
   EGLint surface_attribs[] = {EGL_WIDTH, (EGLint)context_options.width,
@@ -251,7 +260,7 @@ void EGLContextWrapper::InitEGL(napi_env env,
   surface = eglCreatePbufferSurface(display, config, surface_attribs);
   if (surface == EGL_NO_SURFACE) {
     NAPI_THROW_ERROR(env, "Could not create surface");
-    return;
+    return false;
   }
 
   EGLint actual_width = 0;
@@ -264,8 +273,9 @@ void EGLContextWrapper::InitEGL(napi_env env,
 
   if (!eglMakeCurrent(display, surface, surface, context)) {
     NAPI_THROW_ERROR(env, "Could not make context current");
-    return;
+    return false;
   }
+  return true;
 }
 
 bool EGLContextWrapper::ResizeSurface(napi_env env, uint32_t width,
@@ -816,12 +826,19 @@ void EGLContextWrapper::RefreshGLVersion() {
 }
 
 void EGLContextWrapper::RefreshGLExtensions() {
-  gl_extensions = std::unique_ptr<GLExtensionsWrapper>(new GLExtensionsWrapper(
-      reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS))));
+  const char* gl_extension_string =
+      glGetString != nullptr
+          ? reinterpret_cast<const char*>(glGetString(GL_EXTENSIONS))
+          : nullptr;
+  gl_extensions = std::unique_ptr<GLExtensionsWrapper>(
+      new GLExtensionsWrapper(gl_extension_string));
 
+  const char* angle_extension_string =
+      glGetString != nullptr ? reinterpret_cast<const char*>(
+                                   glGetString(GL_REQUESTABLE_EXTENSIONS_ANGLE))
+                             : nullptr;
   angle_requestable_extensions = std::unique_ptr<GLExtensionsWrapper>(
-      new GLExtensionsWrapper(reinterpret_cast<const char*>(
-          glGetString(GL_REQUESTABLE_EXTENSIONS_ANGLE))));
+      new GLExtensionsWrapper(angle_extension_string));
 }
 
 bool EGLContextWrapper::IsCurrent() const {
@@ -838,6 +855,8 @@ bool EGLContextWrapper::MakeCurrent() const {
 bool EGLContextWrapper::EnsureCurrent() const {
   return IsCurrent() || MakeCurrent();
 }
+
+bool EGLContextWrapper::IsInitialized() const { return initialized_; }
 
 void EGLContextWrapper::FlushPendingSyncDeletes() {
   if (glDeleteSync == nullptr) {
@@ -918,6 +937,7 @@ void EGLContextWrapper::Destroy() {
   drawing_buffer_width = 0;
   drawing_buffer_height = 0;
   drawing_buffer_format = GL_RGBA8;
+  initialized_ = false;
 
   // TODO(kreeger): Close context attributes.
   // TODO(kreeger): Cleanup global objects.
@@ -927,7 +947,17 @@ EGLContextWrapper::~EGLContextWrapper() { Destroy(); }
 
 EGLContextWrapper* EGLContextWrapper::Create(
     napi_env env, const GLContextOptions& context_options) {
-  return new EGLContextWrapper(env, context_options);
+  EGLContextWrapper* wrapper =
+      new (std::nothrow) EGLContextWrapper(env, context_options);
+  if (wrapper == nullptr) {
+    NAPI_THROW_ERROR(env, "Could not allocate EGL context wrapper");
+    return nullptr;
+  }
+  if (!wrapper->IsInitialized()) {
+    delete wrapper;
+    return nullptr;
+  }
+  return wrapper;
 }
 
 }  // namespace nodejsgl

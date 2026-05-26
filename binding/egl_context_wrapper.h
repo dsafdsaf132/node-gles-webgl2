@@ -88,6 +88,7 @@ class EGLContextWrapper {
   bool IsCurrent() const;
   bool MakeCurrent() const;
   bool EnsureCurrent() const;
+  bool IsInitialized() const;
   void FlushPendingSyncDeletes();
 
   // GLsync objects that could not be deleted immediately because the owner
@@ -350,10 +351,11 @@ class EGLContextWrapper {
  private:
   EGLContextWrapper(napi_env env, const GLContextOptions& context_options);
 
-  void InitEGL(napi_env env, const GLContextOptions& context_options);
+  bool InitEGL(napi_env env, const GLContextOptions& context_options);
   void BindProcAddresses();
   void RefreshGLVersion();
 
+  bool initialized_;
   bool display_ref_retained_;
 };
 

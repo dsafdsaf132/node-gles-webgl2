@@ -150,6 +150,10 @@ void Cleanup(napi_env env, void* native, void* hint) {
   ReleaseGLSyncHandle(env, handle, true);
 }
 
+void DeleteGLSyncHandle(napi_env env, GLSyncHandle* handle) {
+  ReleaseGLSyncResources(env, handle, true);
+}
+
 napi_status WrapGLsync(napi_env env, GLsync& sync,
                        EGLContextWrapper* egl_context_wrapper,
                        napi_value context_value, napi_value* wrapped_value) {
