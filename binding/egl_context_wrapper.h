@@ -47,7 +47,7 @@ struct GLContextOptions {
 class GLExtensionsWrapper {
  public:
   GLExtensionsWrapper(const char* extensions_str)
-      : extensions_(extensions_str) {}
+      : extensions_(extensions_str ? extensions_str : "") {}
 
   bool HasExtension(const char* name) {
     return extensions_.find(name) != std::string::npos;
@@ -91,6 +91,8 @@ class EGLContextWrapper {
   uint32_t drawing_buffer_width;
   uint32_t drawing_buffer_height;
   GLenum drawing_buffer_format;
+  uint32_t client_major_es_version;
+  uint32_t client_minor_es_version;
 
   std::unique_ptr<GLExtensionsWrapper> egl_extensions;
   std::unique_ptr<GLExtensionsWrapper> gl_extensions;
@@ -340,6 +342,7 @@ class EGLContextWrapper {
 
   void InitEGL(napi_env env, const GLContextOptions& context_options);
   void BindProcAddresses();
+  void RefreshGLVersion();
 };
 
 }  // namespace nodejsgl

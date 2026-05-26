@@ -30,12 +30,18 @@ struct GLSyncHandle {
   GLsync sync;
   EGLContextWrapper *egl_context_wrapper;
   napi_ref context_ref;
+  GLSyncHandle *previous;
+  GLSyncHandle *next;
 };
 
 // Creates and wraps a JS object with a GLsync instance.
 napi_status WrapGLsync(napi_env env, GLsync &sync,
                        EGLContextWrapper *egl_context_wrapper,
                        napi_value context_value, napi_value *wrapped_value);
+
+// Reads the native GLsync handle from a JS WebGLSync wrapper.
+napi_status GetGLsyncHandle(napi_env env, napi_value value,
+                            GLSyncHandle **handle);
 
 }  // namespace nodejsgl
 

@@ -1,10 +1,10 @@
-# node-gles-webgl2
+# [node-gles-webgl2](https://www.npmjs.com/package/node-gles-webgl2)
 
 Headless WebGL2 / OpenGL ES 3 runtime for Node.js backed by ANGLE.
 
-This package is a fork of `node-gles`. It preserves the existing WebGL1 surface
-and exposes additional GLES3-backed APIs through WebGL2-compatible JavaScript
-method names.
+This package is a fork of [`node-gles`](https://github.com/google/node-gles). It
+preserves the existing WebGL1 surface and exposes additional GLES3-backed APIs
+through WebGL2-compatible JavaScript method names.
 
 ## Install
 
@@ -55,39 +55,11 @@ paths:
 Texture upload and pixel readback paths support WebGL2 typed-array offsets and
 pixel buffer object numeric offsets where GLES3 supports them.
 
-## Smoke Test
-
-```sh
-node - <<'NODE'
-const nodeGles = require("node-gles-webgl2");
-const gl = nodeGles.createWebGLRenderingContext({
-  width: 8,
-  height: 8,
-  majorVersion: 3,
-  minorVersion: 0
-});
-
-for (const name of [
-  "createVertexArray",
-  "bindVertexArray",
-  "drawArraysInstanced",
-  "drawElementsInstanced",
-  "vertexAttribDivisor",
-  "texImage3D",
-  "readPixels"
-]) {
-  console.log(name, typeof gl[name]);
-}
-
-console.log(gl.getExtension("ANGLE_instanced_arrays") !== null);
-console.log(gl.getExtension("OES_vertex_array_object") !== null);
-console.log(gl.getExtension("WEBGL_draw_buffers") !== null);
-NODE
-```
-
 ## Build From Source
 
 ```sh
+git clone https://github.com/dsafdsaf132/node-gles-webgl2.git
+cd node-gles-webgl2
 npm install --ignore-scripts
 node scripts/install.js
 npm run build
@@ -105,9 +77,10 @@ sudo apt-get install -y build-essential python3 libx11-dev
 ## License
 
 This package is licensed under the Apache License, Version 2.0. See
-`LICENSE` for the full license text.
+[LICENSE](LICENSE) for the full license text.
 
-`node-gles-webgl2` is a fork of `node-gles`. Original source files retain their
-upstream copyright notices, including Google LLC / Google Inc. notices where
-applicable. Modifications in this repository add WebGL2 / OpenGL ES 3 bindings,
-packaging, CI, and publishing workflows for `node-gles-webgl2`.
+`node-gles-webgl2` is a fork of
+[`node-gles`](https://github.com/google/node-gles). Original source files retain
+their upstream copyright notices, including Google LLC / Google Inc. notices
+where applicable. Modifications in this repository add WebGL2 / OpenGL ES 3
+bindings, packaging, CI, and publishing workflows for `node-gles-webgl2`.
