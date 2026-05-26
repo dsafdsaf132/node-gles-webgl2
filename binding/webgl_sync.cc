@@ -18,6 +18,7 @@
 
 #include <mutex>
 #include <new>
+#include <vector>
 
 #include "utils.h"
 
@@ -84,6 +85,7 @@ static void ReleaseGLSyncResources(napi_env env, GLSyncHandle* handle,
   } else {
     handle->sync = nullptr;
   }
+  handle->egl_context_wrapper = nullptr;
   if (handle->context_ref != nullptr) {
     napi_delete_reference(env, handle->context_ref);
     handle->context_ref = nullptr;
@@ -161,6 +163,28 @@ napi_status GetGLsyncHandle(napi_env env, napi_value value,
 
   *handle = candidate;
   return napi_ok;
+}
+
+void InvalidateGLSyncHandlesForContext(napi_env env,
+                                       EGLContextWrapper* egl_context_wrapper) {
+  if (egl_context_wrapper == nullptr) {
+    return;
+  }
+
+  std::vector<GLSyncHandle*> handles;
+  {
+    std::lock_guard<std::mutex> lock(sync_handle_mutex);
+    for (GLSyncHandle* current = sync_handle_head; current != nullptr;
+         current = current->next) {
+      if (current->egl_context_wrapper == egl_context_wrapper) {
+        handles.push_back(current);
+      }
+    }
+  }
+
+  for (GLSyncHandle* handle : handles) {
+    ReleaseGLSyncResources(env, handle, false);
+  }
 }
 
 }  // namespace nodejsgl

@@ -1,7 +1,7 @@
 "use strict";
 
 const assert = require("assert");
-const {execFileSync} = require("child_process");
+const {execFileSync, spawnSync} = require("child_process");
 const path = require("path");
 const nodeGles = require("..");
 
@@ -136,6 +136,54 @@ function testRequiredWebGL2Methods(gl) {
   for (const name of required) {
     assert.strictEqual(typeof gl[name], "function", `${name} is missing`);
   }
+}
+
+function testDestroyApi() {
+  const gl = createContext();
+  assert.strictEqual(typeof gl.destroy, "function");
+  assert.strictEqual(typeof gl.dispose, "function");
+  assert.strictEqual(gl.isContextLost(), false);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  assertNoError(gl, "context before destroy");
+  assert.doesNotThrow(() => gl.destroy());
+  assert.strictEqual(gl.isContextLost(), true);
+  assert.doesNotThrow(() => gl.dispose());
+  assert.throws(() => gl.clear(gl.COLOR_BUFFER_BIT), /destroyed/);
+}
+
+function testSequentialContextCleanup() {
+  const result = spawnSync(process.execPath, ["--expose-gc", "-e", `
+    const assert = require("assert");
+    const nodeGles = require(".");
+    for (let i = 0; i < 16; ++i) {
+      let gl = nodeGles.createWebGLRenderingContext({
+        width: 64,
+        height: 64,
+        majorVersion: 3,
+        minorVersion: 0
+      });
+      gl.clearColor(i % 2, 0, 0, 1);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      const pixel = new Uint8Array(4);
+      gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      assert.strictEqual(gl.getError(), gl.NO_ERROR);
+      gl = null;
+      if (global.gc) global.gc();
+    }
+    if (global.gc) {
+      for (let i = 0; i < 4; ++i) global.gc();
+    }
+  `], {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8"
+  });
+  assert.strictEqual(
+      result.status, 0,
+      `sequential context cleanup failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.strictEqual(
+      result.stderr, "",
+      `sequential context cleanup wrote stderr:\n${result.stderr}`);
 }
 
 function testWebGLOnlyPixelStore(gl) {
@@ -544,3 +592,5 @@ testVertexArrayState(gl);
 testInstancedDrawing(gl, false);
 testInstancedDrawing(gl, true);
 testWebGL2PixelStoreIsGatedForES2();
+testDestroyApi();
+testSequentialContextCleanup();
