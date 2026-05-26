@@ -22,6 +22,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <new>
 #include <string>
 #include <vector>
 
@@ -1950,7 +1951,11 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
       unpack_color_space_("srgb") {
   eglContextWrapper_ = EGLContextWrapper::Create(env, opts);
   if (!eglContextWrapper_) {
-    NAPI_THROW_ERROR(env, "Could not create EGL context");
+    bool exception_pending = false;
+    napi_is_exception_pending(env, &exception_pending);
+    if (!exception_pending) {
+      NAPI_THROW_ERROR(env, "Could not create EGL context");
+    }
     return;
   }
   pixel_store_state_.pack_alignment = 4;
@@ -2007,7 +2012,10 @@ void WebGLRenderingContext::DestroyNativeResources() {
 WebGLRenderingContext::~WebGLRenderingContext() {
   DestroyNativeResources();
 
-  napi_delete_reference(env_, ref_);
+  if (ref_ != nullptr) {
+    napi_delete_reference(env_, ref_);
+    ref_ = nullptr;
+  }
 }
 
 /* static */
@@ -3067,10 +3075,21 @@ napi_value WebGLRenderingContext::InitInternal(napi_env env,
   nstatus = napi_get_value_bool(env, args[4], &opts.webgl_compatibility);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  WebGLRenderingContext *context = new WebGLRenderingContext(env, opts);
-  ENSURE_VALUE_IS_NOT_NULL_RETVAL(env, context, nullptr);
+  WebGLRenderingContext *context =
+      new (std::nothrow) WebGLRenderingContext(env, opts);
+  if (context == nullptr) {
+    NAPI_THROW_ERROR(env, "Could not allocate WebGLRenderingContext");
+    return nullptr;
+  }
+  if (!context->HasNativeResources()) {
+    delete context;
+    return nullptr;
+  }
 
   nstatus = napi_wrap(env, js_this, context, Cleanup, nullptr, &context->ref_);
+  if (nstatus != napi_ok) {
+    delete context;
+  }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   return js_this;
@@ -4880,10 +4899,12 @@ napi_value WebGLRenderingContext::DeleteBuffer(napi_env env,
   napi_status nstatus = GetContextUint32Params(env, info, &context, 1, &buffer);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glDeleteBuffers(1, &buffer);
-
-  // TODO(kreeger): Keep track of global objects.
-  context->alloc_count_--;
+  if (buffer != 0) {
+    context->eglContextWrapper_->glDeleteBuffers(1, &buffer);
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
+  }
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -4901,10 +4922,12 @@ napi_value WebGLRenderingContext::DeleteFramebuffer(napi_env env,
       GetContextUint32Params(env, info, &context, 1, &frame_buffer);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glDeleteFramebuffers(1, &frame_buffer);
-
-  // TODO(kreeger): Keep track of global objects.
-  context->alloc_count_--;
+  if (frame_buffer != 0) {
+    context->eglContextWrapper_->glDeleteFramebuffers(1, &frame_buffer);
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
+  }
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -4922,10 +4945,12 @@ napi_value WebGLRenderingContext::DeleteProgram(napi_env env,
       GetContextUint32Params(env, info, &context, 1, &program);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glDeleteProgram(program);
-
-  // TODO(kreeger): Keep track of global objects.
-  context->alloc_count_--;
+  if (program != 0) {
+    context->eglContextWrapper_->glDeleteProgram(program);
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
+  }
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -4943,7 +4968,9 @@ napi_value WebGLRenderingContext::DeleteQuery(napi_env env,
   ENSURE_GL_PROC_RETVAL(env, context, glDeleteQueries, nullptr);
   if (query != 0) {
     context->eglContextWrapper_->glDeleteQueries(1, &query);
-    context->alloc_count_--;
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
   }
 #if DEBUG
   context->CheckForErrors();
@@ -4962,10 +4989,12 @@ napi_value WebGLRenderingContext::DeleteRenderbuffer(napi_env env,
       GetContextUint32Params(env, info, &context, 1, &renderbuffer);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glDeleteRenderbuffers(1, &renderbuffer);
-
-  // TODO(kreeger): Keep track of global objects.
-  context->alloc_count_--;
+  if (renderbuffer != 0) {
+    context->eglContextWrapper_->glDeleteRenderbuffers(1, &renderbuffer);
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
+  }
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -4984,7 +5013,9 @@ napi_value WebGLRenderingContext::DeleteSampler(napi_env env,
   ENSURE_GL_PROC_RETVAL(env, context, glDeleteSamplers, nullptr);
   if (sampler != 0) {
     context->eglContextWrapper_->glDeleteSamplers(1, &sampler);
-    context->alloc_count_--;
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
   }
 #if DEBUG
   context->CheckForErrors();
@@ -5002,10 +5033,12 @@ napi_value WebGLRenderingContext::DeleteShader(napi_env env,
   napi_status nstatus = GetContextUint32Params(env, info, &context, 1, &shader);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glDeleteShader(shader);
-
-  // TODO(kreeger): Keep track of global objects.
-  context->alloc_count_--;
+  if (shader != 0) {
+    context->eglContextWrapper_->glDeleteShader(shader);
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
+  }
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -5028,7 +5061,6 @@ napi_value WebGLRenderingContext::DeleteSync(napi_env env,
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_GL_PROC_RETVAL(env, context, glDeleteSync, nullptr);
 
   napi_valuetype value_type;
   nstatus = napi_typeof(env, args[0], &value_type);
@@ -5041,13 +5073,8 @@ napi_value WebGLRenderingContext::DeleteSync(napi_env env,
   GLSyncHandle *handle = nullptr;
   nstatus = GetGLsyncHandle(env, args[0], &handle);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (handle != nullptr && handle->sync != nullptr) {
-    context->eglContextWrapper_->glDeleteSync(handle->sync);
-    handle->sync = nullptr;
-  }
-  if (handle != nullptr && handle->context_ref != nullptr) {
-    napi_delete_reference(env, handle->context_ref);
-    handle->context_ref = nullptr;
+  if (handle != nullptr) {
+    DeleteGLSyncHandle(env, handle);
   }
 #if DEBUG
   context->CheckForErrors();
@@ -5066,10 +5093,12 @@ napi_value WebGLRenderingContext::DeleteTexture(napi_env env,
       GetContextUint32Params(env, info, &context, 1, &texture);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glDeleteTextures(1, &texture);
-
-  // TODO(kreeger): Keep track of global objects.
-  context->alloc_count_--;
+  if (texture != 0) {
+    context->eglContextWrapper_->glDeleteTextures(1, &texture);
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
+  }
 #if DEBUG
   context->CheckForErrors();
 #endif
@@ -5089,7 +5118,9 @@ napi_value WebGLRenderingContext::DeleteTransformFeedback(
   if (transform_feedback != 0) {
     context->eglContextWrapper_->glDeleteTransformFeedbacks(
         1, &transform_feedback);
-    context->alloc_count_--;
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
   }
 #if DEBUG
   context->CheckForErrors();
@@ -5120,7 +5151,9 @@ napi_value WebGLRenderingContext::DeleteVertexArray(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (vertex_array != 0) {
     context->eglContextWrapper_->glDeleteVertexArrays(1, &vertex_array);
-    context->alloc_count_--;
+    if (context->alloc_count_.load() > 0) {
+      context->alloc_count_--;
+    }
   }
 #if DEBUG
   context->CheckForErrors();

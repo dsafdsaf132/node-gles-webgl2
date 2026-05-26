@@ -5,12 +5,12 @@ const {execFileSync, spawnSync} = require("child_process");
 const path = require("path");
 const nodeGles = require("..");
 
-function createContext() {
+function createContext(options = {}) {
   return nodeGles.createWebGLRenderingContext({
-    width: 16,
-    height: 16,
-    majorVersion: 3,
-    minorVersion: 0
+    width: options.width === undefined ? 16 : options.width,
+    height: options.height === undefined ? 16 : options.height,
+    majorVersion: options.majorVersion === undefined ? 3 : options.majorVersion,
+    minorVersion: options.minorVersion === undefined ? 0 : options.minorVersion
   });
 }
 
@@ -244,6 +244,87 @@ function testLoseContextSequentialCleanup() {
   assert.strictEqual(
       result.stderr, "",
       `loseContext lifecycle wrote stderr:\n${result.stderr}`);
+}
+
+function testFailedContextCreationDoesNotPoisonProcess() {
+  const result = spawnSync(process.execPath, ["-e", `
+    const assert = require("assert");
+    const nodeGles = require(".");
+    let threw = false;
+    try {
+      nodeGles.createWebGLRenderingContext({
+        width: 16,
+        height: 16,
+        majorVersion: 99,
+        minorVersion: 0
+      });
+    } catch (error) {
+      threw = true;
+    }
+    assert.strictEqual(threw, true, "unsupported context creation should fail");
+    const gl = nodeGles.createWebGLRenderingContext({
+      width: 16,
+      height: 16,
+      majorVersion: 3,
+      minorVersion: 0
+    });
+    gl.clearColor(0, 0, 1, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    const pixel = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    assert.strictEqual(gl.getError(), gl.NO_ERROR);
+    assert.deepStrictEqual(Array.from(pixel), [0, 0, 255, 255]);
+    gl.destroy();
+  `], {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8"
+  });
+  assert.strictEqual(
+      result.status, 0,
+      `failed context recovery failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+}
+
+function testDeleteNullNoOps(gl) {
+  const deleteMethods = [
+    "deleteBuffer",
+    "deleteFramebuffer",
+    "deleteProgram",
+    "deleteRenderbuffer",
+    "deleteShader",
+    "deleteTexture",
+    "deleteQuery",
+    "deleteSampler",
+    "deleteSync",
+    "deleteTransformFeedback",
+    "deleteVertexArray"
+  ];
+  for (const method of deleteMethods) {
+    assert.strictEqual(typeof gl[method], "function", `${method} missing`);
+    assert.doesNotThrow(() => gl[method](null), `${method}(null) threw`);
+  }
+  assertNoError(gl, "null delete no-ops");
+}
+
+function testDeleteSyncUsesOwningContext() {
+  const gl1 = createContext({width: 4, height: 4});
+  const sync = gl1.fenceSync(gl1.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  gl1.flush();
+
+  const gl2 = createContext({width: 16, height: 16});
+  gl2.clearColor(0, 1, 0, 1);
+  gl2.clear(gl2.COLOR_BUFFER_BIT);
+  assertNoError(gl2, "gl2 before cross-context deleteSync");
+
+  assert.doesNotThrow(() => gl2.deleteSync(sync));
+
+  const pixel = new Uint8Array(4);
+  gl2.readPixels(15, 15, 1, 1, gl2.RGBA, gl2.UNSIGNED_BYTE, pixel);
+  assertNoError(gl2, "deleteSync restores caller context");
+  assert.deepStrictEqual(Array.from(pixel), [0, 255, 0, 255]);
+  assertNoError(gl1, "deleteSync owner context");
+
+  gl2.destroy();
+  gl1.destroy();
 }
 
 function testSyncFinalizerRestoresCurrentContext() {
@@ -724,6 +805,7 @@ console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
 testWebGLOnlyPixelStore(gl);
 testWebGLUnpackTransforms(gl);
+testDeleteNullNoOps(gl);
 testVertexArrayState(gl);
 testInstancedDrawing(gl, false);
 testInstancedDrawing(gl, true);
@@ -732,5 +814,7 @@ testDestroyApi();
 testLoseContextApi();
 testSequentialContextCleanup();
 testLoseContextSequentialCleanup();
+testFailedContextCreationDoesNotPoisonProcess();
+testDeleteSyncUsesOwningContext();
 testSyncFinalizerRestoresCurrentContext();
 testMultipleLiveContextsUseOwnCurrentContext();
