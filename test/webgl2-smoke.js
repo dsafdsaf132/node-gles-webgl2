@@ -66,6 +66,63 @@ function assertRedPixel(gl, x, y, label) {
   assert(pixel[3] > 200, `${label}: expected alpha, got ${pixel[3]}`);
 }
 
+function assertPixelNear(pixel, expected, label, tolerance = 2) {
+  for (let i = 0; i < 4; ++i) {
+    assert(
+        Math.abs(pixel[i] - expected[i]) <= tolerance,
+        `${label}: channel ${i} expected ${expected[i]}, got ${pixel[i]}`);
+  }
+}
+
+function readTexture2DPixel(gl, texture, x, y) {
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(framebuffer);
+  return pixel;
+}
+
+function readTexture2DIntegerPixel(gl, texture, x, y) {
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(x, y, 1, 1, gl.RGBA_INTEGER, gl.UNSIGNED_BYTE, pixel);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(framebuffer);
+  return pixel;
+}
+
+function readTextureLayerPixel(gl, texture, layer, x, y) {
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTextureLayer(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, layer);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(framebuffer);
+  return pixel;
+}
+
+function configureTexture(gl, target) {
+  gl.texParameteri(target, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
 function testRequiredWebGL2Methods(gl) {
   const required = [
     "createVertexArray",
@@ -128,46 +185,254 @@ function testWebGLOnlyPixelStore(gl) {
   assert.strictEqual(gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), false);
 }
 
-function testUnsupportedWebGLUnpackUploadGuard(gl) {
-  const pixel2D = new Uint8Array([255, 0, 0, 255]);
+function testWebGLUnpackTransforms(gl) {
+  const pixels2D = new Uint8Array([
+    255, 0, 0, 255, 0, 255, 0, 255,
+    0, 0, 255, 255, 255, 255, 255, 255
+  ]);
   const texture2D = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture2D);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  configureTexture(gl, gl.TEXTURE_2D);
 
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
-                gl.UNSIGNED_BYTE, pixel2D);
-  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
-  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
-                gl.UNSIGNED_BYTE, pixel2D);
-  assertNoError(gl, "texImage2D without WebGL unpack transform");
-
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
-  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA,
-                   gl.UNSIGNED_BYTE, pixel2D);
-  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
-  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
-
-  const pixel3D = new Uint8Array([0, 255, 0, 255]);
-  const texture3D = gl.createTexture();
-  gl.bindTexture(gl.TEXTURE_3D, texture3D);
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL, gl.NONE);
-  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 1, 1, 1, 0, gl.RGBA,
-                gl.UNSIGNED_BYTE, pixel3D);
-  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assertPixelNear(
+      readTexture2DPixel(gl, texture2D, 0, 0), [0, 0, 255, 255],
+      "texImage2D UNPACK_FLIP_Y_WEBGL");
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
   gl.pixelStorei(gl.UNPACK_COLORSPACE_CONVERSION_WEBGL,
                  gl.BROWSER_DEFAULT_WEBGL);
-  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 1, 1, 1, 0, gl.RGBA,
+
+  const objectTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, objectTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, {
+    width: 2,
+    height: 2,
+    data: pixels2D
+  });
+  assertPixelNear(
+      readTexture2DPixel(gl, objectTexture, 0, 0), [0, 0, 255, 255],
+      "texImage2D object source UNPACK_FLIP_Y_WEBGL");
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  const ignore3DStateTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, ignore3DStateTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 1);
+  gl.pixelStorei(gl.UNPACK_SKIP_IMAGES, 2);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assertPixelNear(
+      readTexture2DPixel(gl, ignore3DStateTexture, 0, 0),
+      [0, 0, 255, 255],
+      "texImage2D ignores 3D-only unpack state");
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 0);
+  gl.pixelStorei(gl.UNPACK_SKIP_IMAGES, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  const undersizedSourceTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, undersizedSourceTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, new Uint8Array([1, 2, 3, 4]), 1);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
                 gl.UNSIGNED_BYTE, null);
-  assertNoError(gl, "texImage3D allocation without WebGL unpack transform");
+  assertNoError(gl, "texImage2D null allocation after undersized srcData");
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA,
+                   gl.UNSIGNED_BYTE, new Uint8Array([1, 2, 3, 4]), 1);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
 
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
-  gl.texSubImage3D(gl.TEXTURE_3D, 0, 0, 0, 0, 1, 1, 1, gl.RGBA,
-                   gl.UNSIGNED_BYTE, pixel3D);
+  assert.doesNotThrow(() => {
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 2, 0, 0xdead,
+                  gl.UNSIGNED_BYTE, new Uint8Array(8));
+  });
+  assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  const pboTexture2D = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, pboTexture2D);
+  configureTexture(gl, gl.TEXTURE_2D);
+  const pbo2D = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo2D);
+  gl.bufferData(gl.PIXEL_UNPACK_BUFFER, pixels2D, gl.STATIC_DRAW);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, {
+    width: 2,
+    height: 2,
+    data: pixels2D
+  });
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, 0);
+  assertPixelNear(
+      readTexture2DPixel(gl, pboTexture2D, 0, 0), [0, 0, 255, 255],
+      "texImage2D PBO UNPACK_FLIP_Y_WEBGL");
+
+  const pbo2DIgnore3DStateTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, pbo2DIgnore3DStateTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 1);
+  gl.pixelStorei(gl.UNPACK_SKIP_IMAGES, 2);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, 0);
+  assertPixelNear(
+      readTexture2DPixel(gl, pbo2DIgnore3DStateTexture, 0, 0),
+      [0, 0, 255, 255],
+      "texImage2D PBO ignores 3D-only unpack state");
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 0);
+  gl.pixelStorei(gl.UNPACK_SKIP_IMAGES, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 3);
+  gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 2);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 0);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 255]));
   assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo2D);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 3);
+  gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 2);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, 0);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 0);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+
+  const pboMisaligned = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pboMisaligned);
+  gl.bufferData(gl.PIXEL_UNPACK_BUFFER, 33, gl.STATIC_DRAW);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_SHORT, 1);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+
+  const premultiplyTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, premultiplyTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
+  gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([100, 50, 25, 128]));
+  assertPixelNear(
+      readTexture2DPixel(gl, premultiplyTexture, 0, 0),
+      [50, 25, 13, 128], "texImage2D UNPACK_PREMULTIPLY_ALPHA_WEBGL");
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+
+  const integerPremultiplyTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, integerPremultiplyTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 1);
+  gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA8UI, 1, 1, 0, gl.RGBA_INTEGER,
+      gl.UNSIGNED_BYTE, new Uint8Array([100, 50, 25, 128]));
+  assert.deepStrictEqual(
+      Array.from(readTexture2DIntegerPixel(gl, integerPremultiplyTexture, 0, 0)),
+      [50, 25, 13, 128]);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
+
+  const subTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, subTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  const paddedRows = new Uint8Array([
+    9, 9, 9, 9, 255, 0, 0, 255, 0, 255, 0, 255,
+    9, 9, 9, 9, 0, 0, 255, 255, 255, 255, 255, 255
+  ]);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 3);
+  gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 1);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 2, 2, gl.RGBA,
+                   gl.UNSIGNED_BYTE, paddedRows);
+  assertPixelNear(
+      readTexture2DPixel(gl, subTexture, 0, 0), [0, 0, 255, 255],
+      "texSubImage2D flip with unpack row length");
+  assert.strictEqual(gl.getParameter(gl.UNPACK_ROW_LENGTH), 3);
+  assert.strictEqual(gl.getParameter(gl.UNPACK_SKIP_PIXELS), 1);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+  gl.pixelStorei(gl.UNPACK_SKIP_PIXELS, 0);
+
+  const texture3D = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, texture3D);
+  configureTexture(gl, gl.TEXTURE_3D);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 2, 2, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assertPixelNear(
+      readTextureLayerPixel(gl, texture3D, 0, 0, 0), [0, 0, 255, 255],
+      "texImage3D UNPACK_FLIP_Y_WEBGL");
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 2, 2, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 3);
+  gl.pixelStorei(gl.UNPACK_SKIP_ROWS, 2);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 2, 2, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_SKIP_ROWS, 0);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  const textureArray = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, textureArray);
+  configureTexture(gl, gl.TEXTURE_2D_ARRAY);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA, 2, 2, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  const pbo = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo);
+  gl.bufferData(gl.PIXEL_UNPACK_BUFFER, pixels2D, gl.STATIC_DRAW);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 2, 2, 1, gl.RGBA,
+                   gl.UNSIGNED_BYTE, 0);
+  assertPixelNear(
+      readTextureLayerPixel(gl, textureArray, 0, 0, 0), [0, 0, 255, 255],
+      "texSubImage3D PBO UNPACK_FLIP_Y_WEBGL");
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+  assertNoError(gl, "WebGL unpack transform uploads");
 }
 
 function testVertexArrayState(gl) {
@@ -253,6 +518,19 @@ function testWebGL2PixelStoreIsGatedForES2() {
       const error = gl.getError();
       assert(error === gl.NO_ERROR || error === gl.INVALID_ENUM,
              "unexpected ES2 pixel-store query error " + error);
+      gl.getError();
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(
+          gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+          gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 255]));
+      assert.strictEqual(gl.getError(), gl.NO_ERROR);
+      gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+      gl.texImage2D(
+          gl.TEXTURE_2D, 0, gl.RGBA, 1, 2, 0, gl.RGBA,
+          gl.UNSIGNED_BYTE,
+          new Uint8Array([255, 0, 0, 255, 0, 0, 255, 255]));
+      assert.strictEqual(gl.getError(), gl.NO_ERROR);
     }
   `], {cwd: path.resolve(__dirname, ".."), stdio: "pipe"});
 }
@@ -261,7 +539,7 @@ const gl = createContext();
 console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
 testWebGLOnlyPixelStore(gl);
-testUnsupportedWebGLUnpackUploadGuard(gl);
+testWebGLUnpackTransforms(gl);
 testVertexArrayState(gl);
 testInstancedDrawing(gl, false);
 testInstancedDrawing(gl, true);
