@@ -30,6 +30,8 @@ struct GLSyncHandle {
   GLsync sync;
   EGLContextWrapper *egl_context_wrapper;
   napi_ref context_ref;
+  GLSyncHandle *previous;
+  GLSyncHandle *next;
 };
 
 // Creates and wraps a JS object with a GLsync instance.

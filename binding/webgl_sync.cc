@@ -16,6 +16,7 @@
 
 #include "webgl_sync.h"
 
+#include <mutex>
 #include <new>
 
 #include "utils.h"
@@ -24,7 +25,43 @@ namespace nodejsgl {
 
 namespace {
 
-constexpr const char kGLSyncHandleProperty[] = "__node_gles_webgl_sync_handle";
+std::mutex sync_handle_mutex;
+GLSyncHandle* sync_handle_head = nullptr;
+
+void RegisterGLSyncHandle(GLSyncHandle* handle) {
+  std::lock_guard<std::mutex> lock(sync_handle_mutex);
+  handle->previous = nullptr;
+  handle->next = sync_handle_head;
+  if (sync_handle_head != nullptr) {
+    sync_handle_head->previous = handle;
+  }
+  sync_handle_head = handle;
+}
+
+void UnregisterGLSyncHandle(GLSyncHandle* handle) {
+  std::lock_guard<std::mutex> lock(sync_handle_mutex);
+  if (handle->previous != nullptr) {
+    handle->previous->next = handle->next;
+  } else if (sync_handle_head == handle) {
+    sync_handle_head = handle->next;
+  }
+  if (handle->next != nullptr) {
+    handle->next->previous = handle->previous;
+  }
+  handle->previous = nullptr;
+  handle->next = nullptr;
+}
+
+bool IsRegisteredGLSyncHandle(GLSyncHandle* handle) {
+  std::lock_guard<std::mutex> lock(sync_handle_mutex);
+  for (GLSyncHandle* current = sync_handle_head; current != nullptr;
+       current = current->next) {
+    if (current == handle) {
+      return true;
+    }
+  }
+  return false;
+}
 
 }  // namespace
 
@@ -58,24 +95,9 @@ static void ReleaseGLSyncHandle(napi_env env, GLSyncHandle* handle,
   if (handle == nullptr) {
     return;
   }
+  UnregisterGLSyncHandle(handle);
   ReleaseGLSyncResources(env, handle, delete_sync);
   delete handle;
-}
-
-static void DetachAndReleaseWrappedGLSyncHandle(napi_env env,
-                                                napi_value wrapped_value,
-                                                GLSyncHandle* handle) {
-  void* removed = nullptr;
-  napi_status remove_status = napi_remove_wrap(env, wrapped_value, &removed);
-  if (remove_status == napi_ok && removed != nullptr) {
-    ReleaseGLSyncHandle(env, static_cast<GLSyncHandle*>(removed), true);
-    return;
-  }
-
-  // If napi_remove_wrap fails, the object still owns the native pointer and its
-  // finalizer will delete the handle. Release GL resources now, but leave the
-  // handle allocation for the already-registered cleanup callback.
-  ReleaseGLSyncResources(env, handle, true);
 }
 
 void Cleanup(napi_env env, void* native, void* hint) {
@@ -101,8 +123,8 @@ napi_status WrapGLsync(napi_env env, GLsync& sync,
   }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-  GLSyncHandle* handle =
-      new (std::nothrow) GLSyncHandle{sync, egl_context_wrapper, context_ref};
+  GLSyncHandle* handle = new (std::nothrow)
+      GLSyncHandle{sync, egl_context_wrapper, context_ref, nullptr, nullptr};
   if (handle == nullptr) {
     napi_delete_reference(env, context_ref);
     DeleteGLsync(egl_context_wrapper, &sync);
@@ -118,22 +140,7 @@ napi_status WrapGLsync(napi_env env, GLsync& sync,
   }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-  napi_value handle_external;
-  nstatus =
-      napi_create_external(env, handle, nullptr, nullptr, &handle_external);
-  if (nstatus != napi_ok) {
-    DetachAndReleaseWrappedGLSyncHandle(env, *wrapped_value, handle);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
-  }
-
-  napi_property_descriptor descriptor = {
-      kGLSyncHandleProperty, nullptr,      nullptr, nullptr, nullptr,
-      handle_external,       napi_default, nullptr};
-  nstatus = napi_define_properties(env, *wrapped_value, 1, &descriptor);
-  if (nstatus != napi_ok) {
-    DetachAndReleaseWrappedGLSyncHandle(env, *wrapped_value, handle);
-  }
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  RegisterGLSyncHandle(handle);
 
   return napi_ok;
 }
@@ -147,32 +154,13 @@ napi_status GetGLsyncHandle(napi_env env, napi_value value,
     return napi_invalid_arg;
   }
 
-  napi_value property_key;
-  nstatus = napi_create_string_utf8(
-      env, kGLSyncHandleProperty, NAPI_AUTO_LENGTH, &property_key);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
-
-  bool has_handle = false;
-  nstatus = napi_has_own_property(env, value, property_key, &has_handle);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
-  if (!has_handle) {
+  GLSyncHandle* candidate = static_cast<GLSyncHandle*>(wrapped_handle);
+  if (!IsRegisteredGLSyncHandle(candidate)) {
     NAPI_THROW_ERROR(env, "sync must be a WebGLSync object");
     return napi_invalid_arg;
   }
 
-  napi_value handle_external;
-  nstatus = napi_get_property(env, value, property_key, &handle_external);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
-
-  void* native_handle = nullptr;
-  nstatus = napi_get_value_external(env, handle_external, &native_handle);
-  if (nstatus != napi_ok || native_handle == nullptr ||
-      native_handle != wrapped_handle) {
-    NAPI_THROW_ERROR(env, "sync must be a WebGLSync object");
-    return napi_invalid_arg;
-  }
-
-  *handle = static_cast<GLSyncHandle*>(wrapped_handle);
+  *handle = candidate;
   return napi_ok;
 }
 
