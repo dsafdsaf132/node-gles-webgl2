@@ -1098,6 +1098,10 @@ static napi_status ValidatePixelDataCapacity(
   return napi_ok;
 }
 
+static void QueueWebGLError(EGLContextWrapper *wrapper,
+                            std::deque<GLenum> *pending_errors,
+                            GLenum error);
+
 struct UnpackPixelLayout {
   size_t bytes_per_pixel;
   size_t source_row_stride;
@@ -1130,16 +1134,6 @@ static napi_status GetUnpackPixelLayout(
     NAPI_THROW_ERROR(env,
                      "unsupported pixel format/type for WebGL unpack "
                      "transform");
-    return napi_invalid_arg;
-  }
-  if (pixel_store_state.unpack_row_length > 0 &&
-      pixel_store_state.unpack_row_length < width) {
-    NAPI_THROW_ERROR(env, "UNPACK_ROW_LENGTH is smaller than upload width");
-    return napi_invalid_arg;
-  }
-  if (pixel_store_state.unpack_image_height > 0 &&
-      pixel_store_state.unpack_image_height < height) {
-    NAPI_THROW_ERROR(env, "UNPACK_IMAGE_HEIGHT is smaller than upload height");
     return napi_invalid_arg;
   }
 
@@ -1540,12 +1534,14 @@ struct PreparedTextureUpload {
   const void *data;
   bool use_tight_unpack_state;
   bool unbind_pixel_unpack_buffer;
+  bool skip_upload;
   std::vector<uint8_t> storage;
 
   PreparedTextureUpload()
       : data(nullptr),
         use_tight_unpack_state(false),
-        unbind_pixel_unpack_buffer(false) {}
+        unbind_pixel_unpack_buffer(false),
+        skip_upload(false) {}
 };
 
 static bool NeedsWebGLUnpackStaging(const PixelStoreState &pixel_store_state,
@@ -1561,6 +1557,7 @@ static bool NeedsWebGLUnpackStaging(const PixelStoreState &pixel_store_state,
 static napi_status PrepareWebGLUnpackUpload(
     napi_env env, EGLContextWrapper *wrapper,
     const PixelStoreState &pixel_store_state,
+    std::deque<GLenum> *pending_errors,
     TextureUploadSourceKind source_kind, const void *source_data,
     size_t source_byte_count, GLintptr pixel_unpack_offset, GLsizei width,
     GLsizei height, GLsizei depth, GLenum format, GLenum type,
@@ -1568,12 +1565,42 @@ static napi_status PrepareWebGLUnpackUpload(
   prepared->data = source_data;
   prepared->use_tight_unpack_state = false;
   prepared->unbind_pixel_unpack_buffer = false;
+  prepared->skip_upload = false;
   prepared->storage.clear();
+
+  if (source_kind == TextureUploadSourceKind::kMemory) {
+    GLint bound_pixel_unpack_buffer = 0;
+    wrapper->glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING,
+                           &bound_pixel_unpack_buffer);
+    if (bound_pixel_unpack_buffer != 0) {
+      QueueWebGLError(wrapper, pending_errors, GL_INVALID_OPERATION);
+      prepared->skip_upload = true;
+      return napi_ok;
+    }
+  } else if (source_kind == TextureUploadSourceKind::kPixelUnpackBuffer) {
+    size_t type_bytes = 0;
+    bool is_packed = false;
+    if (GetPixelTypeBytes(type, &type_bytes, &is_packed) && type_bytes > 1 &&
+        static_cast<size_t>(pixel_unpack_offset) % type_bytes != 0) {
+      QueueWebGLError(wrapper, pending_errors, GL_INVALID_OPERATION);
+      prepared->skip_upload = true;
+      return napi_ok;
+    }
+  }
 
   if (source_kind == TextureUploadSourceKind::kNone ||
       (source_kind == TextureUploadSourceKind::kMemory &&
        source_data == nullptr) ||
       !NeedsWebGLUnpackStaging(pixel_store_state, height, format, type)) {
+    return napi_ok;
+  }
+
+  if ((pixel_store_state.unpack_row_length > 0 &&
+       pixel_store_state.unpack_row_length < width) ||
+      (pixel_store_state.unpack_image_height > 0 &&
+       pixel_store_state.unpack_image_height < height)) {
+    QueueWebGLError(wrapper, pending_errors, GL_INVALID_OPERATION);
+    prepared->skip_upload = true;
     return napi_ok;
   }
 
@@ -8935,9 +8962,12 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
   if (has_source_data) {
     nstatus = PrepareWebGLUnpackUpload(
         env, context->eglContextWrapper_, context->pixel_store_state_,
-        source_kind, data, source_byte_count, pixel_unpack_offset, width, height,
-        1, format, type, &prepared);
+        &context->pending_errors_, source_kind, data, source_byte_count,
+        pixel_unpack_offset, width, height, 1, format, type, &prepared);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    if (prepared.skip_upload) {
+      return nullptr;
+    }
   }
 
   ScopedPixelUnpackBufferBinding pixel_unpack_buffer_binding(
@@ -9059,9 +9089,12 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
   if (has_source_data) {
     nstatus = PrepareWebGLUnpackUpload(
         env, context->eglContextWrapper_, context->pixel_store_state_,
-        source_kind, data, source_byte_count, pixel_unpack_offset, width, height,
-        depth, format, type, &prepared);
+        &context->pending_errors_, source_kind, data, source_byte_count,
+        pixel_unpack_offset, width, height, depth, format, type, &prepared);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    if (prepared.skip_upload) {
+      return nullptr;
+    }
   }
 
   ENSURE_GL_PROC_RETVAL(env, context, glTexImage3D, nullptr);
@@ -9502,9 +9535,12 @@ napi_value WebGLRenderingContext::TexSubImage2D(napi_env env,
   PreparedTextureUpload prepared;
   nstatus = PrepareWebGLUnpackUpload(
       env, context->eglContextWrapper_, context->pixel_store_state_,
-      source_kind, data, source_byte_count, pixel_unpack_offset, width, height,
-      1, format, type, &prepared);
+      &context->pending_errors_, source_kind, data, source_byte_count,
+      pixel_unpack_offset, width, height, 1, format, type, &prepared);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (prepared.skip_upload) {
+    return nullptr;
+  }
 
   ScopedPixelUnpackBufferBinding pixel_unpack_buffer_binding(
       context->eglContextWrapper_, prepared.unbind_pixel_unpack_buffer);
@@ -9623,9 +9659,12 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
   PreparedTextureUpload prepared;
   nstatus = PrepareWebGLUnpackUpload(
       env, context->eglContextWrapper_, context->pixel_store_state_,
-      source_kind, data, source_byte_count, pixel_unpack_offset, width, height,
-      depth, format, type, &prepared);
+      &context->pending_errors_, source_kind, data, source_byte_count,
+      pixel_unpack_offset, width, height, depth, format, type, &prepared);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  if (prepared.skip_upload) {
+    return nullptr;
+  }
 
   ENSURE_GL_PROC_RETVAL(env, context, glTexSubImage3D, nullptr);
   ScopedPixelUnpackBufferBinding pixel_unpack_buffer_binding(

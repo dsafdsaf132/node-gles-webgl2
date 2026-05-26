@@ -213,10 +213,37 @@ function testWebGLUnpackTransforms(gl) {
   gl.bufferData(gl.PIXEL_UNPACK_BUFFER, pixels2D, gl.STATIC_DRAW);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, {
+    width: 2,
+    height: 2,
+    data: pixels2D
+  });
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
                 gl.UNSIGNED_BYTE, 0);
   assertPixelNear(
       readTexture2DPixel(gl, pboTexture2D, 0, 0), [0, 0, 255, 255],
       "texImage2D PBO UNPACK_FLIP_Y_WEBGL");
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_ROW_LENGTH, 0);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  const pboMisaligned = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pboMisaligned);
+  gl.bufferData(gl.PIXEL_UNPACK_BUFFER, 33, gl.STATIC_DRAW);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 2, 2, 0, gl.RGBA,
+                gl.UNSIGNED_SHORT, 1);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
   gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
 
@@ -264,6 +291,14 @@ function testWebGLUnpackTransforms(gl) {
   assertPixelNear(
       readTextureLayerPixel(gl, texture3D, 0, 0, 0), [0, 0, 255, 255],
       "texImage3D UNPACK_FLIP_Y_WEBGL");
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
+
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 1);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 1);
+  gl.texImage3D(gl.TEXTURE_3D, 0, gl.RGBA, 2, 2, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, pixels2D);
+  assert.strictEqual(gl.getError(), gl.INVALID_OPERATION);
+  gl.pixelStorei(gl.UNPACK_IMAGE_HEIGHT, 0);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
 
   const textureArray = gl.createTexture();
