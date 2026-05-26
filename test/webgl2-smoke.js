@@ -114,11 +114,15 @@ function testWebGLOnlyPixelStore(gl) {
       gl.BROWSER_DEFAULT_WEBGL);
 
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 2);
-  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
+  assert.strictEqual(gl.getError(), gl.NO_ERROR);
+  assert.strictEqual(gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), true);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, 0);
   assert.strictEqual(gl.getParameter(gl.UNPACK_FLIP_Y_WEBGL), false);
 
   gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 2);
-  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
+  assert.strictEqual(gl.getError(), gl.NO_ERROR);
+  assert.strictEqual(gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), true);
+  gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, 0);
   assert.strictEqual(gl.getParameter(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL), false);
 }
 

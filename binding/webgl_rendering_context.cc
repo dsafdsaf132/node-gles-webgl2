@@ -1178,7 +1178,7 @@ static bool IsValidWebGLOnlyPixelStoreValue(GLenum pname, GLint param) {
   switch (pname) {
   case GL_UNPACK_FLIP_Y_WEBGL:
   case GL_UNPACK_PREMULTIPLY_ALPHA_WEBGL:
-    return param == 0 || param == 1;
+    return true;
   case GL_UNPACK_COLORSPACE_CONVERSION_WEBGL:
     return param == GL_BROWSER_DEFAULT_WEBGL || param == GL_NONE;
   default:
