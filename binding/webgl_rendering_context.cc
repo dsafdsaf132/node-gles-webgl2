@@ -1568,7 +1568,8 @@ static napi_status PrepareWebGLUnpackUpload(
   prepared->skip_upload = false;
   prepared->storage.clear();
 
-  if (source_kind == TextureUploadSourceKind::kMemory) {
+  if (source_kind == TextureUploadSourceKind::kMemory &&
+      wrapper->client_major_es_version >= 3) {
     GLint bound_pixel_unpack_buffer = 0;
     wrapper->glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING,
                            &bound_pixel_unpack_buffer);

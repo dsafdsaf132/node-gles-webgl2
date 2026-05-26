@@ -403,6 +403,13 @@ function testWebGL2PixelStoreIsGatedForES2() {
       const error = gl.getError();
       assert(error === gl.NO_ERROR || error === gl.INVALID_ENUM,
              "unexpected ES2 pixel-store query error " + error);
+      gl.getError();
+      const texture = gl.createTexture();
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      gl.texImage2D(
+          gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+          gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 255]));
+      assert.strictEqual(gl.getError(), gl.NO_ERROR);
     }
   `], {cwd: path.resolve(__dirname, ".."), stdio: "pipe"});
 }
