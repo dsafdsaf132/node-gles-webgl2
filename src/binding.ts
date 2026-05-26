@@ -118,6 +118,14 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
   readPixels(
     x: number, y: number, width: number, height: number, format: number,
     type: number, pixels: ArrayBufferView | number, dstOffset?: number): void;
+  texImage2D(
+    target: number, level: number, internalformat: number, width: number,
+    height: number, border: number, format: number, type: number,
+    source: ArrayBufferView | number | null, srcOffset?: number): void;
+  texSubImage2D(
+    target: number, level: number, xoffset: number, yoffset: number,
+    width: number, height: number, format: number, type: number,
+    source: ArrayBufferView | number, srcOffset?: number): void;
   texImage3D(
     target: number, level: number, internalformat: number, width: number,
     height: number, depth: number, border: number, format: number, type: number,
