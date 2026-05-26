@@ -1,4 +1,4 @@
-# node-gles-webgl2
+# [node-gles-webgl2](https://www.npmjs.com/package/node-gles-webgl2)
 
 Headless WebGL2 / OpenGL ES 3 runtime for Node.js backed by ANGLE.
 
