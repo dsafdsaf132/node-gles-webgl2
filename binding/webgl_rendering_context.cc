@@ -163,6 +163,10 @@ static napi_status UnwrapContext(napi_env env, napi_value js_this,
     NAPI_THROW_ERROR(env, "WebGLRenderingContext has been destroyed");
     return napi_invalid_arg;
   }
+  if (!(*context)->EnsureNativeContextCurrent()) {
+    NAPI_THROW_ERROR(env, "Could not make WebGLRenderingContext current");
+    return napi_generic_failure;
+  }
   return napi_ok;
 }
 
@@ -1970,6 +1974,10 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
 
 bool WebGLRenderingContext::HasNativeResources() const {
   return eglContextWrapper_ != nullptr;
+}
+
+bool WebGLRenderingContext::EnsureNativeContextCurrent() const {
+  return eglContextWrapper_ != nullptr && eglContextWrapper_->EnsureCurrent();
 }
 
 /* static */

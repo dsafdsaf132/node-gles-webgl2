@@ -835,6 +835,10 @@ bool EGLContextWrapper::MakeCurrent() const {
          eglMakeCurrent(display, surface, surface, context);
 }
 
+bool EGLContextWrapper::EnsureCurrent() const {
+  return IsCurrent() || MakeCurrent();
+}
+
 void EGLContextWrapper::FlushPendingSyncDeletes() {
   if (glDeleteSync == nullptr) {
     pending_sync_deletes.clear();
