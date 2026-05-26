@@ -29,10 +29,15 @@ namespace nodejsgl {
 
 EGLContextWrapper::EGLContextWrapper(napi_env env,
                                      const GLContextOptions& context_options)
-    : context(EGL_NO_CONTEXT), display(EGL_NO_DISPLAY), config(nullptr),
-      surface(EGL_NO_SURFACE), drawing_buffer_width(0),
-      drawing_buffer_height(0), drawing_buffer_format(GL_RGBA8),
-      client_major_es_version(0), client_minor_es_version(0) {
+    : context(EGL_NO_CONTEXT),
+      display(EGL_NO_DISPLAY),
+      config(nullptr),
+      surface(EGL_NO_SURFACE),
+      drawing_buffer_width(0),
+      drawing_buffer_height(0),
+      drawing_buffer_format(GL_RGBA8),
+      client_major_es_version(0),
+      client_minor_es_version(0) {
   InitEGL(env, context_options);
   BindProcAddresses();
   RefreshGLVersion();

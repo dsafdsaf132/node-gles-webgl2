@@ -133,8 +133,7 @@ napi_status WrapGLsync(napi_env env, GLsync& sync,
   }
   sync = nullptr;
 
-  nstatus = napi_wrap(env, *wrapped_value, handle, Cleanup, nullptr,
-                      nullptr);
+  nstatus = napi_wrap(env, *wrapped_value, handle, Cleanup, nullptr, nullptr);
   if (nstatus != napi_ok) {
     ReleaseGLSyncHandle(env, handle, true);
   }
