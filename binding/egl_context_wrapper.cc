@@ -22,6 +22,7 @@
 #include "angle/include/EGL/egl.h"
 #include "angle/include/EGL/eglext.h"
 
+#include <cstdio>
 #include <vector>
 
 namespace nodejsgl {
@@ -30,9 +31,11 @@ EGLContextWrapper::EGLContextWrapper(napi_env env,
                                      const GLContextOptions& context_options)
     : context(EGL_NO_CONTEXT), display(EGL_NO_DISPLAY), config(nullptr),
       surface(EGL_NO_SURFACE), drawing_buffer_width(0),
-      drawing_buffer_height(0), drawing_buffer_format(GL_RGBA8) {
+      drawing_buffer_height(0), drawing_buffer_format(GL_RGBA8),
+      client_major_es_version(0), client_minor_es_version(0) {
   InitEGL(env, context_options);
   BindProcAddresses();
+  RefreshGLVersion();
   RefreshGLExtensions();
 
 #if DEBUG
@@ -693,6 +696,35 @@ void EGLContextWrapper::BindProcAddresses() {
   // ANGLE specific
   glRequestExtensionANGLE = reinterpret_cast<PFNGLREQUESTEXTENSIONANGLEPROC>(
       eglGetProcAddress("glRequestExtensionANGLE"));
+}
+
+void EGLContextWrapper::RefreshGLVersion() {
+  client_major_es_version = 0;
+  client_minor_es_version = 0;
+  if (!glGetString) {
+    return;
+  }
+
+  const GLubyte* version_bytes = glGetString(GL_VERSION);
+  if (!version_bytes) {
+    return;
+  }
+
+  const char* version = reinterpret_cast<const char*>(version_bytes);
+  for (const char* cursor = version; *cursor; ++cursor) {
+    if (*cursor < '0' || *cursor > '9') {
+      continue;
+    }
+
+    unsigned int major = 0;
+    unsigned int minor = 0;
+    const int parsed = std::sscanf(cursor, "%u.%u", &major, &minor);
+    if (parsed >= 1) {
+      client_major_es_version = major;
+      client_minor_es_version = parsed >= 2 ? minor : 0;
+      return;
+    }
+  }
 }
 
 void EGLContextWrapper::RefreshGLExtensions() {

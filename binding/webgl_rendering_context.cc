@@ -1151,6 +1151,29 @@ static void UpdatePixelStoreState(PixelStoreState *state, GLenum pname,
   }
 }
 
+static bool IsWebGLOnlyPixelStoreParameter(GLenum pname) {
+  return pname == GL_UNPACK_FLIP_Y_WEBGL ||
+         pname == GL_UNPACK_PREMULTIPLY_ALPHA_WEBGL ||
+         pname == GL_UNPACK_COLORSPACE_CONVERSION_WEBGL;
+}
+
+static void UpdateWebGLOnlyPixelStoreState(PixelStoreState *state,
+                                           GLenum pname, GLint param) {
+  switch (pname) {
+  case GL_UNPACK_FLIP_Y_WEBGL:
+    state->unpack_flip_y_webgl = param != 0;
+    break;
+  case GL_UNPACK_PREMULTIPLY_ALPHA_WEBGL:
+    state->unpack_premultiply_alpha_webgl = param != 0;
+    break;
+  case GL_UNPACK_COLORSPACE_CONVERSION_WEBGL:
+    state->unpack_colorspace_conversion_webgl = param;
+    break;
+  default:
+    break;
+  }
+}
+
 napi_ref WebGLRenderingContext::constructor_ref_;
 
 WebGLRenderingContext::WebGLRenderingContext(napi_env env,
@@ -1174,7 +1197,12 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
   pixel_store_state_.unpack_skip_pixels = 0;
   pixel_store_state_.unpack_image_height = 0;
   pixel_store_state_.unpack_skip_images = 0;
-  supports_webgl2_pixel_store_ = opts.client_major_es_version >= 3;
+  pixel_store_state_.unpack_flip_y_webgl = false;
+  pixel_store_state_.unpack_premultiply_alpha_webgl = false;
+  pixel_store_state_.unpack_colorspace_conversion_webgl =
+      GL_BROWSER_DEFAULT_WEBGL;
+  supports_webgl2_pixel_store_ =
+      eglContextWrapper_->client_major_es_version >= 3;
   alloc_count_ = 0;
 }
 
@@ -5437,6 +5465,82 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     break;
   }
 
+  case GL_UNPACK_FLIP_Y_WEBGL: {
+    napi_value value;
+    nstatus = napi_get_boolean(
+        env, context->pixel_store_state_.unpack_flip_y_webgl, &value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return value;
+  }
+
+  case GL_UNPACK_PREMULTIPLY_ALPHA_WEBGL: {
+    napi_value value;
+    nstatus = napi_get_boolean(
+        env, context->pixel_store_state_.unpack_premultiply_alpha_webgl,
+        &value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return value;
+  }
+
+  case GL_UNPACK_COLORSPACE_CONVERSION_WEBGL: {
+    napi_value value;
+    nstatus = napi_create_int32(
+        env, context->pixel_store_state_.unpack_colorspace_conversion_webgl,
+        &value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return value;
+  }
+
+  case GL_PACK_ALIGNMENT:
+  case GL_PACK_ROW_LENGTH:
+  case GL_PACK_SKIP_ROWS:
+  case GL_PACK_SKIP_PIXELS:
+  case GL_UNPACK_ALIGNMENT:
+  case GL_UNPACK_ROW_LENGTH:
+  case GL_UNPACK_SKIP_ROWS:
+  case GL_UNPACK_SKIP_PIXELS:
+  case GL_UNPACK_IMAGE_HEIGHT:
+  case GL_UNPACK_SKIP_IMAGES: {
+    GLint value = 0;
+    switch (name) {
+    case GL_PACK_ALIGNMENT:
+      value = context->pixel_store_state_.pack_alignment;
+      break;
+    case GL_PACK_ROW_LENGTH:
+      value = context->pixel_store_state_.pack_row_length;
+      break;
+    case GL_PACK_SKIP_ROWS:
+      value = context->pixel_store_state_.pack_skip_rows;
+      break;
+    case GL_PACK_SKIP_PIXELS:
+      value = context->pixel_store_state_.pack_skip_pixels;
+      break;
+    case GL_UNPACK_ALIGNMENT:
+      value = context->pixel_store_state_.unpack_alignment;
+      break;
+    case GL_UNPACK_ROW_LENGTH:
+      value = context->pixel_store_state_.unpack_row_length;
+      break;
+    case GL_UNPACK_SKIP_ROWS:
+      value = context->pixel_store_state_.unpack_skip_rows;
+      break;
+    case GL_UNPACK_SKIP_PIXELS:
+      value = context->pixel_store_state_.unpack_skip_pixels;
+      break;
+    case GL_UNPACK_IMAGE_HEIGHT:
+      value = context->pixel_store_state_.unpack_image_height;
+      break;
+    case GL_UNPACK_SKIP_IMAGES:
+      value = context->pixel_store_state_.unpack_skip_images;
+      break;
+    }
+
+    napi_value js_value;
+    nstatus = napi_create_int32(env, value, &js_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return js_value;
+  }
+
   case GL_ARRAY_BUFFER_BINDING: {
     GLint previous_buffer = 0;
     context->eglContextWrapper_->glGetIntegerv(GL_ARRAY_BUFFER_BINDING,
@@ -7621,6 +7725,11 @@ napi_value WebGLRenderingContext::PixelStorei(napi_env env,
   } else {
     nstatus = napi_get_value_int32(env, args[1], &param);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
+  if (IsWebGLOnlyPixelStoreParameter(pname)) {
+    UpdateWebGLOnlyPixelStoreState(&context->pixel_store_state_, pname, param);
+    return nullptr;
   }
 
   context->eglContextWrapper_->glPixelStorei(pname, param);

@@ -38,6 +38,9 @@ struct PixelStoreState {
   GLint unpack_skip_pixels;
   GLint unpack_image_height;
   GLint unpack_skip_images;
+  bool unpack_flip_y_webgl;
+  bool unpack_premultiply_alpha_webgl;
+  GLint unpack_colorspace_conversion_webgl;
 };
 
 class WebGLRenderingContext {
