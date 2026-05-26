@@ -47,7 +47,7 @@ struct GLContextOptions {
 class GLExtensionsWrapper {
  public:
   GLExtensionsWrapper(const char* extensions_str)
-      : extensions_(extensions_str) {}
+      : extensions_(extensions_str ? extensions_str : "") {}
 
   bool HasExtension(const char* name) {
     return extensions_.find(name) != std::string::npos;

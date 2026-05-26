@@ -20,6 +20,12 @@
 
 namespace nodejsgl {
 
+namespace {
+
+constexpr const char kGLSyncHandleProperty[] = "__node_gles_webgl_sync_handle";
+
+}  // namespace
+
 static void ReleaseGLSyncHandle(napi_env env, GLSyncHandle* handle,
                                 bool delete_sync) {
   if (handle == nullptr) {
@@ -60,10 +66,71 @@ napi_status WrapGLsync(napi_env env, GLsync& sync,
   nstatus = napi_wrap(env, *wrapped_value, handle, Cleanup, nullptr,
                       nullptr);
   if (nstatus != napi_ok) {
-    ReleaseGLSyncHandle(env, handle, false);
+    ReleaseGLSyncHandle(env, handle, true);
   }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
+  napi_value handle_external;
+  nstatus =
+      napi_create_external(env, handle, nullptr, nullptr, &handle_external);
+  if (nstatus != napi_ok) {
+    void* removed = nullptr;
+    napi_status remove_status = napi_remove_wrap(env, *wrapped_value, &removed);
+    ReleaseGLSyncHandle(
+        env,
+        remove_status == napi_ok && removed != nullptr
+            ? static_cast<GLSyncHandle*>(removed)
+            : handle,
+        true);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  }
+
+  napi_property_descriptor descriptor = {
+      kGLSyncHandleProperty, nullptr,      nullptr, nullptr, nullptr,
+      handle_external,       napi_default, nullptr};
+  nstatus = napi_define_properties(env, *wrapped_value, 1, &descriptor);
+  if (nstatus != napi_ok) {
+    void* removed = nullptr;
+    napi_status remove_status = napi_remove_wrap(env, *wrapped_value, &removed);
+    ReleaseGLSyncHandle(
+        env,
+        remove_status == napi_ok && removed != nullptr
+            ? static_cast<GLSyncHandle*>(removed)
+            : handle,
+        true);
+  }
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  return napi_ok;
+}
+
+napi_status GetGLsyncHandle(napi_env env, napi_value value,
+                            GLSyncHandle** handle) {
+  napi_value property_key;
+  napi_status nstatus = napi_create_string_utf8(
+      env, kGLSyncHandleProperty, NAPI_AUTO_LENGTH, &property_key);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  bool has_handle = false;
+  nstatus = napi_has_own_property(env, value, property_key, &has_handle);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  if (!has_handle) {
+    NAPI_THROW_ERROR(env, "sync must be a WebGLSync object");
+    return napi_invalid_arg;
+  }
+
+  napi_value handle_external;
+  nstatus = napi_get_property(env, value, property_key, &handle_external);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  void* native_handle = nullptr;
+  nstatus = napi_get_value_external(env, handle_external, &native_handle);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  *handle = static_cast<GLSyncHandle*>(native_handle);
+  if (*handle == nullptr) {
+    NAPI_THROW_ERROR(env, "sync handle is null");
+    return napi_invalid_arg;
+  }
   return napi_ok;
 }
 

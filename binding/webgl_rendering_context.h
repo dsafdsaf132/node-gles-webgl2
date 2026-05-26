@@ -27,6 +27,19 @@
 
 namespace nodejsgl {
 
+struct PixelStoreState {
+  GLint pack_alignment;
+  GLint pack_row_length;
+  GLint pack_skip_rows;
+  GLint pack_skip_pixels;
+  GLint unpack_alignment;
+  GLint unpack_row_length;
+  GLint unpack_skip_rows;
+  GLint unpack_skip_pixels;
+  GLint unpack_image_height;
+  GLint unpack_skip_images;
+};
+
 class WebGLRenderingContext {
  public:
   static napi_status Register(napi_env env, napi_value exports);
@@ -319,6 +332,8 @@ class WebGLRenderingContext {
   EGLContextWrapper* eglContextWrapper_;
   std::string drawing_buffer_color_space_;
   std::string unpack_color_space_;
+  PixelStoreState pixel_store_state_;
+  bool supports_webgl2_pixel_store_;
 
   std::atomic<size_t> alloc_count_;
 };

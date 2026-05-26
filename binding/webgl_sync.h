@@ -37,6 +37,10 @@ napi_status WrapGLsync(napi_env env, GLsync &sync,
                        EGLContextWrapper *egl_context_wrapper,
                        napi_value context_value, napi_value *wrapped_value);
 
+// Reads the native GLsync handle from a JS WebGLSync wrapper.
+napi_status GetGLsyncHandle(napi_env env, napi_value value,
+                            GLSyncHandle **handle);
+
 }  // namespace nodejsgl
 
 #endif  // NODEJS_GL_WEBGL_SYNC_H_
