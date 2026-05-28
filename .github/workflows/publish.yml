@@ -41,8 +41,8 @@ jobs:
         run: |
           set -euo pipefail
 
-          if [ "${GITHUB_REF_NAME}" != "master" ]; then
-            echo "::error::Publish workflow must be run from master, got ${GITHUB_REF_NAME}"
+          if [ "${GITHUB_REF_NAME}" != "main" ]; then
+            echo "::error::Publish workflow must be run from main, got ${GITHUB_REF_NAME}"
             exit 1
           fi
 
