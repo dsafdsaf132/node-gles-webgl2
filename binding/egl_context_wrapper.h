@@ -213,6 +213,7 @@ class EGLContextWrapper {
   glGetFramebufferAttachmentParameteriv;
   PFNGLGETFRAGDATALOCATIONPROC glGetFragDataLocation;
   PFNGLGETINTEGERI_VPROC glGetIntegeri_v;
+  PFNGLGETINTEGER64VPROC glGetInteger64v;
   PFNGLGETINTEGERVPROC glGetIntegerv;
   PFNGLGETINTERNALFORMATIVPROC glGetInternalformativ;
   PFNGLGETPROGRAMIVPROC glGetProgramiv;

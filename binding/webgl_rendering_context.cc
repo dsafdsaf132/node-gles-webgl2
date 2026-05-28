@@ -36,6 +36,8 @@
 
 namespace nodejsgl {
 
+static constexpr GLenum kMaxClientWaitTimeoutWebGL = 0x9247;
+
 // Basic type to control what byte-width the ArrayLike buffer is for cleanup.
 enum NodeJSGLArrayType {
   kInt32 = 0,
@@ -2767,7 +2769,8 @@ napi_status WebGLRenderingContext::Register(napi_env env, napi_value exports) {
       NapiDefineIntProperty(env, GL_INT_SAMPLER_3D, "INT_SAMPLER_3D"),
       NapiDefineIntProperty(env, GL_INT_SAMPLER_CUBE, "INT_SAMPLER_CUBE"),
       NapiDefineIntProperty(env, GL_MAX, "MAX"),
-      NapiDefineIntProperty(env, 0x9247, "MAX_CLIENT_WAIT_TIMEOUT_WEBGL"),
+      NapiDefineIntProperty(env, kMaxClientWaitTimeoutWebGL,
+                            "MAX_CLIENT_WAIT_TIMEOUT_WEBGL"),
       NapiDefineIntProperty(env, GL_MAX_ELEMENTS_INDICES,
                             "MAX_ELEMENTS_INDICES"),
       NapiDefineIntProperty(env, GL_MAX_ELEMENTS_VERTICES,
@@ -6373,6 +6376,8 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     case GL_GREEN_BITS:
     case GL_IMPLEMENTATION_COLOR_READ_FORMAT:
     case GL_IMPLEMENTATION_COLOR_READ_TYPE:
+    case GL_MAX_3D_TEXTURE_SIZE:
+    case GL_MAX_ARRAY_TEXTURE_LAYERS:
     case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
     case GL_MAX_COLOR_ATTACHMENTS:
     case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
@@ -6380,7 +6385,6 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     case GL_MAX_DRAW_BUFFERS:
     case GL_MAX_ELEMENTS_INDICES:
     case GL_MAX_ELEMENTS_VERTICES:
-    case GL_MAX_ELEMENT_INDEX:
     case GL_MAX_FRAGMENT_INPUT_COMPONENTS:
     case GL_MAX_FRAGMENT_UNIFORM_COMPONENTS:
     case GL_MAX_VERTEX_ATTRIBS:
@@ -6413,6 +6417,7 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     case GL_RENDERBUFFER_BINDING:
     case GL_SAMPLE_BUFFERS:
     case GL_SAMPLES:
+    case GL_SAMPLER_BINDING:
     case GL_STENCIL_BACK_FAIL:
     case GL_STENCIL_BACK_FUNC:
     case GL_STENCIL_BACK_PASS_DEPTH_FAIL:
@@ -6448,6 +6453,66 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
       nstatus = napi_create_int32(env, params, &params_value);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+      return params_value;
+    }
+
+    case GL_DRAW_BUFFER0:
+    case GL_DRAW_BUFFER1:
+    case GL_DRAW_BUFFER2:
+    case GL_DRAW_BUFFER3:
+    case GL_DRAW_BUFFER4:
+    case GL_DRAW_BUFFER5:
+    case GL_DRAW_BUFFER6:
+    case GL_DRAW_BUFFER7:
+    case GL_DRAW_BUFFER8:
+    case GL_DRAW_BUFFER9:
+    case GL_DRAW_BUFFER10:
+    case GL_DRAW_BUFFER11:
+    case GL_DRAW_BUFFER12:
+    case GL_DRAW_BUFFER13:
+    case GL_DRAW_BUFFER14:
+    case GL_DRAW_BUFFER15: {
+      GLint max_draw_buffers = 0;
+      context->eglContextWrapper_->glGetIntegerv(GL_MAX_DRAW_BUFFERS,
+                                                 &max_draw_buffers);
+      const GLint draw_buffer_index =
+          static_cast<GLint>(name - GL_DRAW_BUFFER0);
+      if (max_draw_buffers <= 0 || draw_buffer_index >= max_draw_buffers) {
+        QueueWebGLErrorFromNativeFailure(context->eglContextWrapper_,
+                                         &context->pending_errors_,
+                                         GL_INVALID_ENUM);
+        napi_value null_value;
+        nstatus = napi_get_null(env, &null_value);
+        ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+        return null_value;
+      }
+
+      GLint params = 0;
+      context->eglContextWrapper_->glGetIntegerv(name, &params);
+
+      napi_value params_value;
+      nstatus = napi_create_int32(env, params, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+      return params_value;
+    }
+
+    case GL_MAX_ELEMENT_INDEX:
+    case GL_MAX_SERVER_WAIT_TIMEOUT: {
+      ENSURE_GL_PROC_RETVAL(env, context, glGetInteger64v, nullptr);
+      GLint64 params = 0;
+      context->eglContextWrapper_->glGetInteger64v(name, &params);
+      napi_value params_value;
+      nstatus =
+          napi_create_double(env, static_cast<double>(params), &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case kMaxClientWaitTimeoutWebGL: {
+      napi_value params_value;
+      nstatus = napi_create_double(env, 0, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
       return params_value;
     }
 

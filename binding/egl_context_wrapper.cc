@@ -503,6 +503,8 @@ void EGLContextWrapper::BindProcAddresses() {
   glGetFramebufferAttachmentParameteriv =
       reinterpret_cast<PFNGLGETFRAMEBUFFERATTACHMENTPARAMETERIVPROC>(
           eglGetProcAddress("glGetFramebufferAttachmentParameteriv"));
+  glGetInteger64v = reinterpret_cast<PFNGLGETINTEGER64VPROC>(
+      eglGetProcAddress("glGetInteger64v"));
   glGetIntegerv = reinterpret_cast<PFNGLGETINTEGERVPROC>(
       eglGetProcAddress("glGetIntegerv"));
   glGenTextures = reinterpret_cast<PFNGLGENTEXTURESPROC>(

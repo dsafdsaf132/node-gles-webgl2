@@ -225,7 +225,24 @@ function testGetParameterSemantics(gl) {
   assert.strictEqual(gl.getParameter(gl.ARRAY_BUFFER_BINDING), 0);
   assert.strictEqual(gl.getParameter(gl.CURRENT_PROGRAM), 0);
   assert.strictEqual(gl.getParameter(gl.VERTEX_ARRAY_BINDING), 0);
+  assert.strictEqual(gl.getParameter(gl.SAMPLER_BINDING), 0);
+  assert(Number.isInteger(gl.getParameter(gl.MAX_3D_TEXTURE_SIZE)));
+  assert(Number.isInteger(gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS)));
   assert(Number.isInteger(gl.getParameter(gl.MAX_TEXTURE_SIZE)));
+  const maxDrawBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
+  assert(Number.isInteger(maxDrawBuffers));
+  assert.strictEqual(gl.getParameter(gl.DRAW_BUFFER0), gl.BACK);
+  if (maxDrawBuffers > 1) {
+    assert(Number.isInteger(gl.getParameter(
+        gl.DRAW_BUFFER0 + maxDrawBuffers - 1)));
+  }
+  if (maxDrawBuffers < 16) {
+    assert.strictEqual(gl.getParameter(gl.DRAW_BUFFER0 + maxDrawBuffers), null);
+    assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+  }
+  assert(gl.getParameter(gl.MAX_ELEMENT_INDEX) >= 0x7fffffff);
+  assert.strictEqual(typeof gl.getParameter(gl.MAX_CLIENT_WAIT_TIMEOUT_WEBGL),
+                     "number");
 
   const anisotropy = gl.getExtension("EXT_texture_filter_anisotropic");
   if (anisotropy) {

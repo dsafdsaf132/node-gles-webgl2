@@ -32,6 +32,8 @@ const exists = util.promisify(fs.exists);
 const rename = util.promisify(fs.rename);
 const unlink = util.promisify(fs.unlink);
 const copyFile = util.promisify(fs.copyFile);
+const readFile = util.promisify(fs.readFile);
+const writeFile = util.promisify(fs.writeFile);
 
 // Determine which tarball to download based on the OS platform and arch:
 const platform = os.platform().toLowerCase();
@@ -62,6 +64,7 @@ const ANGLE_BINARY_URI = new URL(
 // Dependency storage paths:
 const depsPath = path.join(__dirname, '..', 'deps');
 const angleReleasePath = path.join(depsPath, 'angle', 'out', 'Release');
+const angleMetadataPath = path.join(depsPath, 'angle', '.node-gles-angle.json');
 
 //
 // Ensures that a directory exists at a given path.
@@ -118,6 +121,49 @@ async function hasRequiredAngleFiles() {
     }
   }
   return true;
+}
+
+async function readAngleMetadata() {
+  if (!await exists(angleMetadataPath)) {
+    return null;
+  }
+  try {
+    const content = await readFile(angleMetadataPath, 'utf8');
+    return JSON.parse(content);
+  } catch (err) {
+    return null;
+  }
+}
+
+async function writeAngleMetadata() {
+  const metadata = {
+    version: ANGLE_VERSION,
+    platformArch,
+    archiveName: ANGLE_ARCHIVE_NAME,
+    archiveUri: ANGLE_BINARY_URI,
+    sha256: process.env.NODE_GLES_ANGLE_SHA256 || null
+  };
+  await writeFile(angleMetadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
+}
+
+async function hasReusableAngleFiles() {
+  if (!await hasRequiredAngleFiles()) {
+    return false;
+  }
+
+  const metadata = await readAngleMetadata();
+  if (metadata !== null) {
+    return metadata.version === ANGLE_VERSION &&
+        metadata.platformArch === platformArch &&
+        metadata.archiveName === ANGLE_ARCHIVE_NAME &&
+        metadata.archiveUri === ANGLE_BINARY_URI &&
+        metadata.sha256 === (process.env.NODE_GLES_ANGLE_SHA256 || null);
+  }
+
+  const hasInstallOverride = Boolean(process.env.NODE_GLES_ANGLE_VERSION) ||
+      Boolean(process.env.NODE_GLES_ANGLE_BASE_URI) ||
+      Boolean(process.env.NODE_GLES_ANGLE_SHA256);
+  return !hasInstallOverride;
 }
 
 function assertSafeTarEntries(tempFileName) {
@@ -255,7 +301,7 @@ async function verifyArchiveChecksum(tempFileName) {
 // Downloads and extracts the ANGLE archive set at `ANGLE_BINARY_URI`.
 //
 async function downloadAngleLibs() {
-  if (await hasRequiredAngleFiles()) {
+  if (await hasReusableAngleFiles()) {
     console.error(`* Reusing ANGLE from ${angleReleasePath}`);
     return;
   }
@@ -291,6 +337,7 @@ async function downloadAngleLibs() {
           `ANGLE archive did not provide the required files in ` +
           angleReleasePath);
     }
+    await writeAngleMetadata();
   } finally {
     await unlinkIfExists(tempFileName);
   }
