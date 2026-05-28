@@ -20,6 +20,7 @@
 
 #include <node_api.h>
 #include <stdio.h>
+
 #include <sstream>
 
 #define ARRAY_SIZE(array) (sizeof(array) / sizeof(array[0]))

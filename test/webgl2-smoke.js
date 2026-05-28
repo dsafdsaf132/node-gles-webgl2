@@ -57,6 +57,33 @@ void main() {
   return program;
 }
 
+function testInfoLogEmptyStrings(gl) {
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, `
+attribute vec2 a_position;
+void main() {
+  gl_PointSize = 1.0;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`);
+  assert.strictEqual(gl.getShaderInfoLog(vertexShader), "");
+
+  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, `
+precision mediump float;
+void main() {
+  gl_FragColor = vec4(1.0);
+}
+`);
+  assert.strictEqual(gl.getShaderInfoLog(fragmentShader), "");
+
+  const program = gl.createProgram();
+  assert.strictEqual(gl.getProgramInfoLog(program), "");
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.linkProgram(program);
+  assert.strictEqual(gl.getProgramParameter(program, gl.LINK_STATUS), true);
+  assert.strictEqual(gl.getProgramInfoLog(program), "");
+}
+
 function assertRedPixel(gl, x, y, label) {
   const pixel = new Uint8Array(4);
   gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
@@ -136,6 +163,86 @@ function testRequiredWebGL2Methods(gl) {
   for (const name of required) {
     assert.strictEqual(typeof gl[name], "function", `${name} is missing`);
   }
+}
+
+function testSupportedExtensionsReflectGetExtension(gl) {
+  const supported = gl.getSupportedExtensions();
+  assert(Array.isArray(supported), "getSupportedExtensions should return an array");
+  assert.strictEqual(
+      new Set(supported).size, supported.length,
+      "getSupportedExtensions should not contain duplicates");
+
+  const knownExtensions = [
+    "ANGLE_instanced_arrays",
+    "EXT_blend_minmax",
+    "EXT_color_buffer_float",
+    "WEBGL_color_buffer_float",
+    "EXT_color_buffer_half_float",
+    "EXT_frag_depth",
+    "EXT_sRGB",
+    "EXT_shader_texture_lod",
+    "EXT_texture_filter_anisotropic",
+    "OES_element_index_uint",
+    "OES_standard_derivatives",
+    "OES_texture_float",
+    "OES_texture_float_linear",
+    "OES_texture_half_float",
+    "OES_texture_half_float_linear",
+    "OES_vertex_array_object",
+    "WEBGL_debug_renderer_info",
+    "WEBGL_depth_texture",
+    "WEBGL_draw_buffers",
+    "WEBGL_lose_context"
+  ];
+  for (const name of knownExtensions) {
+    if (gl.getExtension(name) !== null) {
+      assert(
+          supported.includes(name),
+          `${name} is returned by getExtension but missing from getSupportedExtensions`);
+    }
+  }
+  assert(supported.includes("ANGLE_instanced_arrays"));
+  assert(supported.includes("OES_vertex_array_object"));
+  assert(supported.includes("WEBGL_draw_buffers"));
+}
+
+function testGetParameterSemantics(gl) {
+  const viewport = gl.getParameter(gl.VIEWPORT);
+  assert.deepStrictEqual(viewport, [0, 0, 16, 16]);
+  const scissor = gl.getParameter(gl.SCISSOR_BOX);
+  assert.deepStrictEqual(scissor, [0, 0, 16, 16]);
+  assert.strictEqual(gl.getError(), gl.NO_ERROR);
+
+  assert.deepStrictEqual(gl.getParameter(gl.COLOR_CLEAR_VALUE), [0, 0, 0, 0]);
+  assert.deepStrictEqual(gl.getParameter(gl.BLEND_COLOR), [0, 0, 0, 0]);
+  assert.deepStrictEqual(gl.getParameter(gl.DEPTH_RANGE), [0, 1]);
+  assert.deepStrictEqual(gl.getParameter(gl.COLOR_WRITEMASK),
+                         [true, true, true, true]);
+  assert.strictEqual(typeof gl.getParameter(gl.DEPTH_WRITEMASK), "boolean");
+  assert(Array.isArray(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE)));
+  assert(Array.isArray(gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS)));
+
+  assert.strictEqual(gl.getParameter(gl.ARRAY_BUFFER_BINDING), 0);
+  assert.strictEqual(gl.getParameter(gl.CURRENT_PROGRAM), 0);
+  assert.strictEqual(gl.getParameter(gl.VERTEX_ARRAY_BINDING), 0);
+  assert(Number.isInteger(gl.getParameter(gl.MAX_TEXTURE_SIZE)));
+
+  const anisotropy = gl.getExtension("EXT_texture_filter_anisotropic");
+  if (anisotropy) {
+    assert.strictEqual(
+        typeof gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT),
+        "number");
+  }
+  const derivatives = gl.getExtension("OES_standard_derivatives");
+  if (derivatives) {
+    assert(Number.isInteger(
+        gl.getParameter(derivatives.FRAGMENT_SHADER_DERIVATIVE_HINT_OES)));
+  }
+  assert.strictEqual(gl.getError(), gl.NO_ERROR);
+
+  assert.strictEqual(gl.getParameter(0xdeadbeef), null);
+  assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+  assert.strictEqual(gl.getError(), gl.NO_ERROR);
 }
 
 function testDestroyApi() {
@@ -803,6 +910,9 @@ function testWebGL2PixelStoreIsGatedForES2() {
 const gl = createContext();
 console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
+testSupportedExtensionsReflectGetExtension(gl);
+testInfoLogEmptyStrings(gl);
+testGetParameterSemantics(gl);
 testWebGLOnlyPixelStore(gl);
 testWebGLUnpackTransforms(gl);
 testDeleteNullNoOps(gl);

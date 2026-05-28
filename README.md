@@ -82,13 +82,28 @@ npm run build
 ```
 
 `scripts/install.js` downloads the ANGLE binary package into `deps/angle` and
-builds the native addon with `node-gyp`.
+builds the native addon with `node-gyp`. If a complete ANGLE `out/Release`
+directory is already present, the installer reuses it.
+
+Installer overrides:
+
+- `NODE_GLES_ANGLE_VERSION`: ANGLE binary version, default `3729`
+- `NODE_GLES_ANGLE_BASE_URI`: archive base URL
+- `NODE_GLES_ANGLE_SHA256`: optional archive checksum verification
 
 On Linux, the native build needs X11 development headers. On Ubuntu:
 
 ```sh
 sudo apt-get install -y build-essential python3 libx11-dev
 ```
+
+## Platform Support
+
+| Platform | Status |
+| --- | --- |
+| Linux x64 | CI-tested. Requires X11 development headers for native builds. |
+| macOS x64 | Installer path exists, but CI does not currently cover it. |
+| Windows x64 | Installer path exists and copies ANGLE runtime DLLs next to the native addon after build. CI does not currently cover it. |
 
 ## License
 

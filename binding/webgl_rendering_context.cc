@@ -17,6 +17,7 @@
 
 #include "webgl_rendering_context.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstring>
@@ -407,6 +408,31 @@ static napi_status GetStringParam(napi_env env, napi_value string_value,
 
   string.assign(buffer.get(), str_length);
   return napi_ok;
+}
+
+static napi_status CreateInfoLogString(napi_env env, const char *log,
+                                       GLsizei length, napi_value *result) {
+  if (log == nullptr || length <= 0) {
+    return napi_create_string_utf8(env, "", 0, result);
+  }
+
+  size_t string_length = static_cast<size_t>(length);
+  while (string_length > 0 && log[string_length - 1] == '\0') {
+    --string_length;
+  }
+
+  bool only_line_breaks = true;
+  for (size_t i = 0; i < string_length; ++i) {
+    if (log[i] != '\0' && log[i] != '\r' && log[i] != '\n') {
+      only_line_breaks = false;
+      break;
+    }
+  }
+  if (only_line_breaks) {
+    string_length = 0;
+  }
+
+  return napi_create_string_utf8(env, log, string_length, result);
 }
 
 static size_t TypedArrayElementSize(napi_typedarray_type type) {
@@ -6115,6 +6141,84 @@ static napi_status CreateWEBGLDrawBuffersAlias(napi_env env, napi_value context,
   return napi_ok;
 }
 
+static bool IsWebGLExtensionSupported(EGLContextWrapper *egl_ctx,
+                                      const char *name) {
+  if (strcmp(name, "ANGLE_instanced_arrays") == 0) {
+    return (egl_ctx->glDrawArraysInstanced &&
+            egl_ctx->glDrawElementsInstanced &&
+            egl_ctx->glVertexAttribDivisor) ||
+           ANGLEInstancedArraysExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "OES_vertex_array_object") == 0) {
+    return egl_ctx->glGenVertexArrays && egl_ctx->glDeleteVertexArrays &&
+           egl_ctx->glIsVertexArray && egl_ctx->glBindVertexArray;
+  }
+  if (strcmp(name, "WEBGL_draw_buffers") == 0) {
+    return egl_ctx->glDrawBuffers != nullptr;
+  }
+  if (strcmp(name, "EXT_blend_minmax") == 0) {
+    return EXTBlendMinmaxExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "EXT_color_buffer_float") == 0 ||
+      strcmp(name, "WEBGL_color_buffer_float") == 0) {
+    return EXTColorBufferFloatExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "EXT_color_buffer_half_float") == 0) {
+    return EXTColorBufferHalfFloatExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "EXT_frag_depth") == 0) {
+    return EXTFragDepthExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "EXT_sRGB") == 0) {
+    return EXTSRGBExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "EXT_shader_texture_lod") == 0) {
+    return EXTShaderTextureLodExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "EXT_texture_filter_anisotropic") == 0) {
+    return EXTTextureFilterAnisotropicExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "OES_element_index_uint") == 0) {
+    return OESElementIndexUintExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "OES_standard_derivatives") == 0) {
+    return OESStandardDerivativesExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "OES_texture_float") == 0) {
+    return OESTextureFloatExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "OES_texture_float_linear") == 0) {
+    return OESTextureFloatLinearExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "OES_texture_half_float") == 0) {
+    return OESTextureHalfFloatExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "OES_texture_half_float_linear") == 0) {
+    return OESTextureHalfFloatLinearExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "WEBGL_debug_renderer_info") == 0) {
+    return WebGLDebugRendererInfoExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "WEBGL_depth_texture") == 0) {
+    return WebGLDepthTextureExtension::IsSupported(egl_ctx);
+  }
+  if (strcmp(name, "WEBGL_lose_context") == 0) {
+    return WebGLLoseContextExtension::IsSupported(egl_ctx);
+  }
+  return false;
+}
+
+static void AddUniqueExtension(std::vector<std::string> *extensions,
+                               const char *extension) {
+  if (extension == nullptr || extension[0] == '\0') {
+    return;
+  }
+  if (std::find(extensions->begin(), extensions->end(), extension) ==
+      extensions->end()) {
+    extensions->push_back(extension);
+  }
+}
+
 /* static */
 napi_value WebGLRenderingContext::GetExtension(napi_env env,
                                                napi_callback_info info) {
@@ -6250,16 +6354,94 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   switch (name) {
+    case GL_ACTIVE_TEXTURE:
+    case GL_ALPHA_BITS:
+    case GL_BLUE_BITS:
+    case GL_BLEND_DST_ALPHA:
+    case GL_BLEND_DST_RGB:
+    case GL_BLEND_EQUATION_ALPHA:
+    case GL_BLEND_SRC_ALPHA:
+    case GL_BLEND_SRC_RGB:
+    case GL_CULL_FACE_MODE:
+    case GL_DEPTH_BITS:
+    case GL_DEPTH_FUNC:
+    case GL_ELEMENT_ARRAY_BUFFER_BINDING:
+    case GL_FRAMEBUFFER_BINDING:
+    case GL_FRONT_FACE:
+    case GL_FRAGMENT_SHADER_DERIVATIVE_HINT_OES:
+    case GL_GENERATE_MIPMAP_HINT:
+    case GL_GREEN_BITS:
+    case GL_IMPLEMENTATION_COLOR_READ_FORMAT:
+    case GL_IMPLEMENTATION_COLOR_READ_TYPE:
     case GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS:
+    case GL_MAX_COLOR_ATTACHMENTS:
     case GL_MAX_VERTEX_TEXTURE_IMAGE_UNITS:
     case GL_MAX_CUBE_MAP_TEXTURE_SIZE:
+    case GL_MAX_DRAW_BUFFERS:
+    case GL_MAX_ELEMENTS_INDICES:
+    case GL_MAX_ELEMENTS_VERTICES:
+    case GL_MAX_ELEMENT_INDEX:
+    case GL_MAX_FRAGMENT_INPUT_COMPONENTS:
+    case GL_MAX_FRAGMENT_UNIFORM_COMPONENTS:
     case GL_MAX_VERTEX_ATTRIBS:
     case GL_MAX_VERTEX_UNIFORM_VECTORS:
+    case GL_MAX_VERTEX_UNIFORM_COMPONENTS:
+    case GL_MAX_VERTEX_OUTPUT_COMPONENTS:
     case GL_MAX_VARYING_VECTORS:
+    case GL_MAX_VARYING_COMPONENTS:
     case GL_MAX_FRAGMENT_UNIFORM_VECTORS:
     case GL_MAX_TEXTURE_SIZE:
     case GL_MAX_TEXTURE_IMAGE_UNITS:
-      GLint params;
+    case GL_MAX_RENDERBUFFER_SIZE:
+    case GL_MAX_SAMPLES:
+    case GL_MAX_TRANSFORM_FEEDBACK_INTERLEAVED_COMPONENTS:
+    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_ATTRIBS:
+    case GL_MAX_TRANSFORM_FEEDBACK_SEPARATE_COMPONENTS:
+    case GL_MAX_UNIFORM_BUFFER_BINDINGS:
+    case GL_MAX_UNIFORM_BLOCK_SIZE:
+    case GL_MAX_VERTEX_UNIFORM_BLOCKS:
+    case GL_MAX_FRAGMENT_UNIFORM_BLOCKS:
+    case GL_MAX_COMBINED_UNIFORM_BLOCKS:
+    case GL_MIN_PROGRAM_TEXEL_OFFSET:
+    case GL_MAX_PROGRAM_TEXEL_OFFSET:
+    case GL_PACK_ALIGNMENT:
+    case GL_PIXEL_PACK_BUFFER_BINDING:
+    case GL_PIXEL_UNPACK_BUFFER_BINDING:
+    case GL_READ_BUFFER:
+    case GL_READ_FRAMEBUFFER_BINDING:
+    case GL_RED_BITS:
+    case GL_RENDERBUFFER_BINDING:
+    case GL_SAMPLE_BUFFERS:
+    case GL_SAMPLES:
+    case GL_STENCIL_BACK_FAIL:
+    case GL_STENCIL_BACK_FUNC:
+    case GL_STENCIL_BACK_PASS_DEPTH_FAIL:
+    case GL_STENCIL_BACK_PASS_DEPTH_PASS:
+    case GL_STENCIL_BACK_REF:
+    case GL_STENCIL_BACK_VALUE_MASK:
+    case GL_STENCIL_BACK_WRITEMASK:
+    case GL_STENCIL_BITS:
+    case GL_STENCIL_CLEAR_VALUE:
+    case GL_STENCIL_FAIL:
+    case GL_STENCIL_FUNC:
+    case GL_STENCIL_PASS_DEPTH_FAIL:
+    case GL_STENCIL_PASS_DEPTH_PASS:
+    case GL_STENCIL_REF:
+    case GL_STENCIL_VALUE_MASK:
+    case GL_STENCIL_WRITEMASK:
+    case GL_SUBPIXEL_BITS:
+    case GL_TEXTURE_BINDING_2D:
+    case GL_TEXTURE_BINDING_CUBE_MAP:
+    case GL_TEXTURE_BINDING_2D_ARRAY:
+    case GL_TEXTURE_BINDING_3D:
+    case GL_TRANSFORM_FEEDBACK_BINDING:
+    case GL_UNIFORM_BUFFER_BINDING:
+    case GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT:
+    case GL_COPY_READ_BUFFER_BINDING:
+    case GL_COPY_WRITE_BUFFER_BINDING:
+    case GL_CURRENT_PROGRAM:
+    case GL_VERTEX_ARRAY_BINDING: {
+      GLint params = 0;
       context->eglContextWrapper_->glGetIntegerv(name, &params);
 
       napi_value params_value;
@@ -6267,6 +6449,110 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
       return params_value;
+    }
+
+    case GL_BLEND_EQUATION: {
+      GLint params = 0;
+      context->eglContextWrapper_->glGetIntegerv(GL_BLEND_EQUATION_RGB,
+                                                 &params);
+      napi_value params_value;
+      nstatus = napi_create_int32(env, params, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_MAX_COMBINED_VERTEX_UNIFORM_COMPONENTS:
+    case GL_MAX_COMBINED_FRAGMENT_UNIFORM_COMPONENTS: {
+      GLint params = 0;
+      context->eglContextWrapper_->glGetIntegerv(name, &params);
+      napi_value params_value;
+      nstatus = napi_create_int32(env, params, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_COMPRESSED_TEXTURE_FORMATS: {
+      GLint count = 0;
+      context->eglContextWrapper_->glGetIntegerv(
+          GL_NUM_COMPRESSED_TEXTURE_FORMATS, &count);
+      std::vector<GLint> params(count > 0 ? count : 0);
+      if (!params.empty()) {
+        context->eglContextWrapper_->glGetIntegerv(name, params.data());
+      }
+      napi_value params_value;
+      nstatus = CreateNumericArray<int32_t>(env, params.data(), params.size(),
+                                            CreateInt32, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_ALIASED_LINE_WIDTH_RANGE:
+    case GL_ALIASED_POINT_SIZE_RANGE:
+    case GL_DEPTH_RANGE: {
+      GLfloat params[2] = {0, 0};
+      context->eglContextWrapper_->glGetFloatv(name, params);
+      napi_value params_value;
+      nstatus =
+          CreateNumericArray<float>(env, params, 2, CreateFloat, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_BLEND_COLOR:
+    case GL_COLOR_CLEAR_VALUE: {
+      GLfloat params[4] = {0, 0, 0, 0};
+      context->eglContextWrapper_->glGetFloatv(name, params);
+      napi_value params_value;
+      nstatus =
+          CreateNumericArray<float>(env, params, 4, CreateFloat, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_SCISSOR_BOX:
+    case GL_VIEWPORT: {
+      GLint params[4] = {0, 0, 0, 0};
+      context->eglContextWrapper_->glGetIntegerv(name, params);
+      napi_value params_value;
+      nstatus = CreateNumericArray<int32_t>(env, params, 4, CreateInt32,
+                                            &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_MAX_VIEWPORT_DIMS: {
+      GLint params[2] = {0, 0};
+      context->eglContextWrapper_->glGetIntegerv(name, params);
+      napi_value params_value;
+      nstatus = CreateNumericArray<int32_t>(env, params, 2, CreateInt32,
+                                            &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_COLOR_WRITEMASK: {
+      GLint params[4] = {0, 0, 0, 0};
+      context->eglContextWrapper_->glGetIntegerv(name, params);
+      napi_value params_value;
+      nstatus = CreateBoolArray(env, params, 4, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
+
+    case GL_DEPTH_CLEAR_VALUE:
+    case GL_LINE_WIDTH:
+    case GL_POLYGON_OFFSET_FACTOR:
+    case GL_POLYGON_OFFSET_UNITS:
+    case GL_SAMPLE_COVERAGE_VALUE:
+    case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:
+    case GL_MAX_TEXTURE_LOD_BIAS: {
+      GLfloat params = 0;
+      context->eglContextWrapper_->glGetFloatv(name, &params);
+      napi_value params_value;
+      nstatus = napi_create_double(env, params, &params_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return params_value;
+    }
 
     case GL_VERSION: {
       const GLubyte *str = context->eglContextWrapper_->glGetString(name);
@@ -6324,13 +6610,9 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
       return value;
     }
 
-    case GL_PACK_ALIGNMENT:
     case GL_UNPACK_ALIGNMENT: {
       GLint value = 0;
       switch (name) {
-        case GL_PACK_ALIGNMENT:
-          value = context->pixel_store_state_.pack_alignment;
-          break;
         case GL_UNPACK_ALIGNMENT:
           value = context->pixel_store_state_.unpack_alignment;
           break;
@@ -6413,7 +6695,8 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     case GL_SAMPLE_ALPHA_TO_COVERAGE:
     case GL_SAMPLE_COVERAGE:
     case GL_SCISSOR_TEST:
-    case GL_STENCIL_TEST: {
+    case GL_STENCIL_TEST:
+    case GL_RASTERIZER_DISCARD: {
       GLboolean enabled = context->eglContextWrapper_->glIsEnabled(name);
       napi_value enabled_value;
       nstatus = napi_get_boolean(env, enabled, &enabled_value);
@@ -6421,13 +6704,23 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
       return enabled_value;
     }
 
-    default: {
-      GLint params;
-      context->eglContextWrapper_->glGetIntegerv(name, &params);
-      napi_value params_value;
-      nstatus = napi_create_int32(env, params, &params_value);
+    case GL_DEPTH_WRITEMASK:
+    case GL_SAMPLE_COVERAGE_INVERT: {
+      GLint enabled = 0;
+      context->eglContextWrapper_->glGetIntegerv(name, &enabled);
+      napi_value enabled_value;
+      nstatus = napi_get_boolean(env, enabled != 0, &enabled_value);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-      return params_value;
+      return enabled_value;
+    }
+
+    default: {
+      QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                      GL_INVALID_ENUM);
+      napi_value null_value;
+      nstatus = napi_get_null(env, &null_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return null_value;
     }
   }
 
@@ -7054,13 +7347,21 @@ napi_value WebGLRenderingContext::GetProgramInfoLog(napi_env env,
   context->eglContextWrapper_->glGetProgramiv(program, GL_INFO_LOG_LENGTH,
                                               &log_length);
 
-  char *error = new char[log_length];
-  context->eglContextWrapper_->glGetProgramInfoLog(program, log_length,
-                                                   &log_length, error);
+  if (log_length <= 0) {
+    napi_value empty_value;
+    nstatus = napi_create_string_utf8(env, "", 0, &empty_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return empty_value;
+  }
+
+  std::vector<char> error(log_length);
+  GLsizei written_length = 0;
+  context->eglContextWrapper_->glGetProgramInfoLog(
+      program, log_length, &written_length, error.data());
 
   napi_value error_value;
-  nstatus = napi_create_string_utf8(env, error, log_length, &error_value);
-  delete[] error;
+  nstatus =
+      CreateInfoLogString(env, error.data(), written_length, &error_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
 #if DEBUG
@@ -7267,13 +7568,21 @@ napi_value WebGLRenderingContext::GetShaderInfoLog(napi_env env,
   context->eglContextWrapper_->glGetShaderiv(shader, GL_INFO_LOG_LENGTH,
                                              &log_length);
 
-  char *error = new char[log_length];
-  context->eglContextWrapper_->glGetShaderInfoLog(shader, log_length,
-                                                  &log_length, error);
+  if (log_length <= 0) {
+    napi_value empty_value;
+    nstatus = napi_create_string_utf8(env, "", 0, &empty_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return empty_value;
+  }
+
+  std::vector<char> error(log_length);
+  GLsizei written_length = 0;
+  context->eglContextWrapper_->glGetShaderInfoLog(
+      shader, log_length, &written_length, error.data());
 
   napi_value error_value;
-  nstatus = napi_create_string_utf8(env, error, log_length, &error_value);
-  delete[] error;
+  nstatus =
+      CreateInfoLogString(env, error.data(), written_length, &error_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
 #if DEBUG
@@ -7404,47 +7713,52 @@ napi_value WebGLRenderingContext::GetSupportedExtensions(
 
   context->eglContextWrapper_->RefreshGLExtensions();
 
+  std::vector<std::string> supported_extensions;
   std::string s(context->eglContextWrapper_->angle_requestable_extensions
                     ->GetExtensions());
-
-  std::string delim = " ";
+  const std::string delim = " ";
   size_t pos = 0;
-  uint32_t index = 0;
   std::string token;
   while ((pos = s.find(delim)) != std::string::npos) {
     token = s.substr(0, pos);
     s.erase(0, pos + delim.length());
+    AddUniqueExtension(&supported_extensions, token.c_str());
+  }
+  AddUniqueExtension(&supported_extensions, s.c_str());
 
-    napi_value str_value;
-    nstatus =
-        napi_create_string_utf8(env, token.c_str(), token.size(), &str_value);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-    nstatus = napi_set_element(env, extensions_value, index++, str_value);
-    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  const char *known_extensions[] = {
+      "ANGLE_instanced_arrays",
+      "EXT_blend_minmax",
+      "EXT_color_buffer_float",
+      "WEBGL_color_buffer_float",
+      "EXT_color_buffer_half_float",
+      "EXT_frag_depth",
+      "EXT_sRGB",
+      "EXT_shader_texture_lod",
+      "EXT_texture_filter_anisotropic",
+      "OES_element_index_uint",
+      "OES_standard_derivatives",
+      "OES_texture_float",
+      "OES_texture_float_linear",
+      "OES_texture_half_float",
+      "OES_texture_half_float_linear",
+      "OES_vertex_array_object",
+      "WEBGL_debug_renderer_info",
+      "WEBGL_depth_texture",
+      "WEBGL_draw_buffers",
+      "WEBGL_lose_context",
+  };
+  for (const char *extension : known_extensions) {
+    if (IsWebGLExtensionSupported(context->eglContextWrapper_, extension)) {
+      AddUniqueExtension(&supported_extensions, extension);
+    }
   }
 
-  const char *aliases[] = {"ANGLE_instanced_arrays", "OES_vertex_array_object",
-                           "WEBGL_draw_buffers"};
-  for (const char *alias : aliases) {
-    bool available = false;
-    if (strcmp(alias, "ANGLE_instanced_arrays") == 0) {
-      available = context->eglContextWrapper_->glDrawArraysInstanced &&
-                  context->eglContextWrapper_->glDrawElementsInstanced &&
-                  context->eglContextWrapper_->glVertexAttribDivisor;
-    } else if (strcmp(alias, "OES_vertex_array_object") == 0) {
-      available = context->eglContextWrapper_->glGenVertexArrays &&
-                  context->eglContextWrapper_->glDeleteVertexArrays &&
-                  context->eglContextWrapper_->glIsVertexArray &&
-                  context->eglContextWrapper_->glBindVertexArray;
-    } else if (strcmp(alias, "WEBGL_draw_buffers") == 0) {
-      available = context->eglContextWrapper_->glDrawBuffers;
-    }
-    if (!available) {
-      continue;
-    }
+  uint32_t index = 0;
+  for (const std::string &extension : supported_extensions) {
     napi_value str_value;
-    nstatus = napi_create_string_utf8(env, alias, strlen(alias), &str_value);
+    nstatus = napi_create_string_utf8(env, extension.c_str(), extension.size(),
+                                      &str_value);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     nstatus = napi_set_element(env, extensions_value, index++, str_value);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);

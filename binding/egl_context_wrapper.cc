@@ -17,11 +17,6 @@
 
 #include "egl_context_wrapper.h"
 
-#include "utils.h"
-
-#include "angle/include/EGL/egl.h"
-#include "angle/include/EGL/eglext.h"
-
 #include <cstdio>
 #include <iomanip>
 #include <iostream>
@@ -29,6 +24,10 @@
 #include <mutex>
 #include <new>
 #include <vector>
+
+#include "angle/include/EGL/egl.h"
+#include "angle/include/EGL/eglext.h"
+#include "utils.h"
 
 namespace nodejsgl {
 
@@ -499,6 +498,8 @@ void EGLContextWrapper::BindProcAddresses() {
       eglGetProcAddress("glGetBufferParameteriv"));
   glGetError =
       reinterpret_cast<PFNGLGETERRORPROC>(eglGetProcAddress("glGetError"));
+  glGetFloatv =
+      reinterpret_cast<PFNGLGETFLOATVPROC>(eglGetProcAddress("glGetFloatv"));
   glGetFramebufferAttachmentParameteriv =
       reinterpret_cast<PFNGLGETFRAMEBUFFERATTACHMENTPARAMETERIVPROC>(
           eglGetProcAddress("glGetFramebufferAttachmentParameteriv"));

@@ -21,7 +21,6 @@
 #include <node_api.h>
 
 #include "angle/include/GLES2/gl2.h"
-
 #include "egl_context_wrapper.h"
 
 namespace nodejsgl {

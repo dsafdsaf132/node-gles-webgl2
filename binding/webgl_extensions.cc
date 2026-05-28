@@ -19,7 +19,6 @@
 
 #include "angle/include/GLES2/gl2.h"
 #include "angle/include/GLES2/gl2ext.h"
-
 #include "utils.h"
 #include "webgl_rendering_context.h"
 
