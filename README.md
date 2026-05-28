@@ -6,6 +6,34 @@ This package is a fork of [`node-gles`](https://github.com/google/node-gles). It
 preserves the existing WebGL1 surface and exposes additional GLES3-backed APIs
 through WebGL2-compatible JavaScript method names.
 
+## WebGL2 Coverage
+
+Status: ✅ implemented, 🟡 partial or backend-dependent, ❌ not guaranteed.
+
+| Feature | Status |
+| --- | --- |
+| WebGL1 API surface | ✅ |
+| ANGLE / OpenGL ES 3 context creation | ✅ |
+| WebGL2-compatible method names | 🟡 |
+| Vertex array objects | ✅ |
+| Instanced rendering | ✅ |
+| Extension aliases (`ANGLE_instanced_arrays`, `OES_vertex_array_object`, `WEBGL_draw_buffers`) | ✅ |
+| Draw buffers | ✅ |
+| Context cleanup (`destroy()` / `dispose()`) | ✅ |
+| Multisample framebuffer operations | 🟡 |
+| 3D textures and 2D texture arrays | 🟡 |
+| Typed-array texture upload offsets | 🟡 |
+| Pixel buffer object numeric offsets | 🟡 |
+| Buffer copy and readback | 🟡 |
+| Transform feedback | 🟡 |
+| Query objects | 🟡 |
+| Sampler objects | 🟡 |
+| Sync objects | 🟡 |
+| Integer vertex attributes | 🟡 |
+| Unsigned integer uniforms | 🟡 |
+| Non-square uniform matrices | 🟡 |
+| Browser-complete WebGL2 conformance | ❌ |
+
 ## Install
 
 From npm:
@@ -36,24 +64,6 @@ const gl = nodeGles.createWebGLRenderingContext({
 
 console.log(gl.getParameter(gl.VERSION));
 ```
-
-## WebGL2 Coverage
-
-The binding exposes the WebGL2 entry points used by wasm-bindgen renderers,
-including VAOs, instanced rendering, draw buffers, multisample framebuffer
-operations, buffer copy/readback, transform feedback, queries, samplers, sync
-objects, 3D textures, integer vertex attributes, unsigned uniforms, and
-non-square matrix uniforms.
-
-Compatibility aliases are also available for common WebGL1 extension fallback
-paths:
-
-- `ANGLE_instanced_arrays`
-- `OES_vertex_array_object`
-- `WEBGL_draw_buffers`
-
-Texture upload and pixel readback paths support WebGL2 typed-array offsets and
-pixel buffer object numeric offsets where GLES3 supports them.
 
 ## Context Lifecycle
 
