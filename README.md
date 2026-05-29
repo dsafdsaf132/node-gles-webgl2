@@ -10,26 +10,15 @@ through WebGL2-compatible JavaScript method names.
 
 | Feature | Status |
 | --- | --- |
-| WebGL1 API surface | ✅ |
-| ANGLE / OpenGL ES 3 context creation | ✅ |
+| Runtime and context lifecycle | ✅ |
+| WebGL1 API and selected extension aliases | ✅ |
 | WebGL2 core method names | ✅ |
-| Browser-compatible WebGL2 overloads and error semantics | 🟡 |
-| Vertex array objects | ✅ |
-| Instanced rendering | ✅ |
-| WebGL1 extension compatibility aliases (`ANGLE_instanced_arrays`, `OES_vertex_array_object`, `WEBGL_draw_buffers`) | ✅ |
-| Draw buffers | ✅ |
-| Multisample framebuffer operations | ✅ |
+| VAO, instancing, draw buffers, and multisample framebuffers | ✅ |
+| Buffer, sampler, sync, and PBO operations | ✅ |
+| WebGL2 uniform and matrix APIs | ✅ |
 | 3D textures and 2D texture arrays | 🟡 |
-| Typed-array texture upload offsets | ✅ |
-| Pixel buffer object numeric offsets | ✅ |
-| Buffer copy and readback | ✅ |
-| Transform feedback | 🟡 |
-| Query objects | 🟡 |
-| Sampler objects | ✅ |
-| Sync objects | ✅ |
-| Integer vertex attributes | 🟡 |
-| Unsigned integer uniforms | ✅ |
-| Non-square uniform matrices | ✅ |
+| Queries, transform feedback, and integer vertex attributes | 🟡 |
+| Browser-compatible overloads and error semantics | 🟡 |
 | Browser-complete WebGL2 conformance | ❌ |
 
 ## Install
