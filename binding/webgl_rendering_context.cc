@@ -3066,7 +3066,8 @@ napi_status WebGLRenderingContext::NewInstance(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
-  ENSURE_ARGC_RETVAL(env, argc, argc, nstatus);
+  ENSURE_ARGC_RETVAL(env, argc, 5, nstatus);
+  argc = std::min(argc, static_cast<size_t>(5));
 
   nstatus = napi_new_instance(env, ctor_value, argc, args, instance);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
@@ -3086,7 +3087,7 @@ napi_value WebGLRenderingContext::InitInternal(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, argc, nullptr);
+  ENSURE_ARGC_RETVAL(env, argc, 5, nullptr);
 
   GLContextOptions opts;
   nstatus = napi_get_value_uint32(env, args[0], &opts.width);
@@ -3760,7 +3761,7 @@ napi_value WebGLRenderingContext::ClearBufferfv(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc < 3 || argc > 4) {
+  if (argc < 3) {
     NAPI_THROW_ERROR(env, "Incorrect number of arguments");
     return nullptr;
   }
@@ -3780,7 +3781,7 @@ napi_value WebGLRenderingContext::ClearBufferfv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   uint32_t src_offset = 0;
-  if (argc == 4) {
+  if (argc >= 4) {
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[3], nullptr);
     nstatus = napi_get_value_uint32(env, args[3], &src_offset);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -3814,7 +3815,7 @@ napi_value WebGLRenderingContext::ClearBufferiv(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc < 3 || argc > 4) {
+  if (argc < 3) {
     NAPI_THROW_ERROR(env, "Incorrect number of arguments");
     return nullptr;
   }
@@ -3834,7 +3835,7 @@ napi_value WebGLRenderingContext::ClearBufferiv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   uint32_t src_offset = 0;
-  if (argc == 4) {
+  if (argc >= 4) {
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[3], nullptr);
     nstatus = napi_get_value_uint32(env, args[3], &src_offset);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -3868,7 +3869,7 @@ napi_value WebGLRenderingContext::ClearBufferuiv(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc < 3 || argc > 4) {
+  if (argc < 3) {
     NAPI_THROW_ERROR(env, "Incorrect number of arguments");
     return nullptr;
   }
@@ -3888,7 +3889,7 @@ napi_value WebGLRenderingContext::ClearBufferuiv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   uint32_t src_offset = 0;
-  if (argc == 4) {
+  if (argc >= 4) {
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[3], nullptr);
     nstatus = napi_get_value_uint32(env, args[3], &src_offset);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -4076,7 +4077,7 @@ napi_value WebGLRenderingContext::CompressedTexImage2D(
 
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc < 7 || argc > 9) {
+  if (argc < 7) {
     NAPI_THROW_ERROR(env, "compressedTexImage2D expects 7, 8, or 9 arguments");
     return nullptr;
   }
@@ -4123,7 +4124,7 @@ napi_value WebGLRenderingContext::CompressedTexImage2D(
   nstatus = napi_typeof(env, args[6], &data_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (data_type == napi_number) {
-    if (argc != 8) {
+    if (argc < 8) {
       NAPI_THROW_ERROR(
           env, "compressedTexImage2D PBO upload expects imageSize and offset");
       return nullptr;
@@ -4176,7 +4177,7 @@ napi_value WebGLRenderingContext::CompressedTexImage3D(
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc < 8 || argc > 10) {
+  if (argc < 8) {
     NAPI_THROW_ERROR(env, "compressedTexImage3D expects 8, 9, or 10 arguments");
     return nullptr;
   }
@@ -4218,7 +4219,7 @@ napi_value WebGLRenderingContext::CompressedTexImage3D(
   nstatus = napi_typeof(env, args[7], &data_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (data_type == napi_number) {
-    if (argc != 9) {
+    if (argc < 9) {
       NAPI_THROW_ERROR(
           env, "compressedTexImage3D PBO upload expects imageSize and offset");
       return nullptr;
@@ -4274,7 +4275,7 @@ napi_value WebGLRenderingContext::CompressedTexSubImage2D(
 
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc < 8 || argc > 10) {
+  if (argc < 8) {
     NAPI_THROW_ERROR(env,
                      "compressedTexSubImage2D expects 8, 9, or 10 arguments");
     return nullptr;
@@ -4327,7 +4328,7 @@ napi_value WebGLRenderingContext::CompressedTexSubImage2D(
   nstatus = napi_typeof(env, args[7], &data_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (data_type == napi_number) {
-    if (argc != 9) {
+    if (argc < 9) {
       NAPI_THROW_ERROR(env,
                        "compressedTexSubImage2D PBO upload expects imageSize "
                        "and offset");
@@ -4381,7 +4382,7 @@ napi_value WebGLRenderingContext::CompressedTexSubImage3D(
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc < 10 || argc > 12) {
+  if (argc < 10) {
     NAPI_THROW_ERROR(env,
                      "compressedTexSubImage3D expects 10, 11, or 12 arguments");
     return nullptr;
@@ -4430,7 +4431,7 @@ napi_value WebGLRenderingContext::CompressedTexSubImage3D(
   nstatus = napi_typeof(env, args[9], &data_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (data_type == napi_number) {
-    if (argc != 11) {
+    if (argc < 11) {
       NAPI_THROW_ERROR(env,
                        "compressedTexSubImage3D PBO upload expects imageSize "
                        "and offset");
@@ -9028,7 +9029,7 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc != 7 && argc != 8) {
+  if (argc < 7) {
     NAPI_THROW_ERROR(env, "readPixels expects 7 or 8 arguments");
     return nullptr;
   }
@@ -9074,11 +9075,6 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
   nstatus = napi_typeof(env, args[6], &pixels_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (pixels_type == napi_number) {
-    if (argc == 8) {
-      NAPI_THROW_ERROR(env,
-                       "readPixels dstOffset requires ArrayBufferView data");
-      return nullptr;
-    }
     const void *offset_data = nullptr;
     size_t required_byte_count = 0;
     nstatus = GetRequiredPixelDataByteCount(env, context->pixel_store_state_,
@@ -9093,7 +9089,7 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
     data = const_cast<void *>(offset_data);
   } else {
     uint32_t dst_offset = 0;
-    if (argc == 8) {
+    if (argc >= 8) {
       nstatus =
           GetOptionalArrayOffsetParam(env, args[7], "dstOffset", &dst_offset);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -9375,10 +9371,19 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+  if (argc < 6) {
+    NAPI_THROW_ERROR(env, "texImage2D expects 6, 9, or 10 arguments");
+    return nullptr;
+  }
+
+  napi_valuetype sixth_arg_type;
+  nstatus = napi_typeof(env, args[5], &sixth_arg_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
   // texImage2D has a WebGL1 API that only takes 6 args intead of 9. This
   // argument is in place to allow the user to pass an HTML element. Handle
   // the only types that are available to get the required properties.
-  if (argc == 6) {
+  if (sixth_arg_type == napi_object) {
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
     ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[2], nullptr);
@@ -9433,7 +9438,7 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
     has_source_data = true;
   } else {
     // If argc is not 6, it should match arguments for OpenGL ES API.
-    if (argc != 9 && argc != 10) {
+    if (argc < 9) {
       NAPI_THROW_ERROR(env, "texImage2D expects 6, 9, or 10 arguments");
       return nullptr;
     }
@@ -9467,11 +9472,6 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
     if (value_type == napi_number) {
-      if (argc == 10) {
-        NAPI_THROW_ERROR(env,
-                         "texImage2D srcOffset requires ArrayBufferView data");
-        return nullptr;
-      }
       size_t required_byte_count = 0;
       const PixelStoreState effective_pixel_store_state =
           GetEffectiveUnpackPixelStoreState(context->pixel_store_state_, false);
@@ -9494,7 +9494,7 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
       has_source_data = true;
     } else if (value_type != napi_null && value_type != napi_undefined) {
       uint32_t src_offset = 0;
-      if (argc == 10) {
+      if (argc >= 10) {
         nstatus =
             GetOptionalArrayOffsetParam(env, args[9], "srcOffset", &src_offset);
         ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -9506,7 +9506,7 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
       source_byte_count = static_cast<size_t>(byte_length);
       source_kind = TextureUploadSourceKind::kMemory;
       has_source_data = true;
-    } else if (argc == 10) {
+    } else if (argc >= 10) {
       NAPI_THROW_ERROR(env,
                        "texImage2D srcOffset requires ArrayBufferView data");
       return nullptr;
@@ -9563,7 +9563,7 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc != 10 && argc != 11) {
+  if (argc < 10) {
     NAPI_THROW_ERROR(env, "texImage3D expects 10 or 11 arguments");
     return nullptr;
   }
@@ -9615,11 +9615,6 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
   bool has_source_data =
       value_type != napi_null && value_type != napi_undefined;
   if (value_type == napi_number) {
-    if (argc == 11) {
-      NAPI_THROW_ERROR(env,
-                       "texImage3D srcOffset requires ArrayBufferView data");
-      return nullptr;
-    }
     size_t required_byte_count = 0;
     if (QueueInvalidStagedUnpackBoundsIfNeeded(
             context->eglContextWrapper_, &context->pending_errors_,
@@ -9638,7 +9633,7 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
     source_kind = TextureUploadSourceKind::kPixelUnpackBuffer;
   } else if (value_type != napi_null && value_type != napi_undefined) {
     uint32_t src_offset = 0;
-    if (argc == 11) {
+    if (argc >= 11) {
       nstatus =
           GetOptionalArrayOffsetParam(env, args[10], "srcOffset", &src_offset);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -9656,7 +9651,7 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
     }
     source_byte_count = static_cast<size_t>(byte_length);
     source_kind = TextureUploadSourceKind::kMemory;
-  } else if (argc == 11) {
+  } else if (argc >= 11) {
     NAPI_THROW_ERROR(env, "texImage3D srcOffset requires ArrayBufferView data");
     return nullptr;
   }
@@ -10016,7 +10011,7 @@ napi_value WebGLRenderingContext::TexSubImage2D(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc != 9 && argc != 10) {
+  if (argc < 9) {
     NAPI_THROW_ERROR(env, "texSubImage2D expects 9 or 10 arguments");
     return nullptr;
   }
@@ -10075,11 +10070,6 @@ napi_value WebGLRenderingContext::TexSubImage2D(napi_env env,
   nstatus = napi_typeof(env, args[8], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (value_type == napi_number) {
-    if (argc == 10) {
-      NAPI_THROW_ERROR(env,
-                       "texSubImage2D srcOffset requires ArrayBufferView data");
-      return nullptr;
-    }
     size_t required_byte_count = 0;
     const PixelStoreState effective_pixel_store_state =
         GetEffectiveUnpackPixelStoreState(context->pixel_store_state_, false);
@@ -10100,7 +10090,7 @@ napi_value WebGLRenderingContext::TexSubImage2D(napi_env env,
     source_kind = TextureUploadSourceKind::kPixelUnpackBuffer;
   } else if (value_type != napi_null && value_type != napi_undefined) {
     uint32_t src_offset = 0;
-    if (argc == 10) {
+    if (argc >= 10) {
       nstatus =
           GetOptionalArrayOffsetParam(env, args[9], "srcOffset", &src_offset);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -10152,7 +10142,7 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (argc != 11 && argc != 12) {
+  if (argc < 11) {
     NAPI_THROW_ERROR(env, "texSubImage3D expects 11 or 12 arguments");
     return nullptr;
   }
@@ -10205,11 +10195,6 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
   nstatus = napi_typeof(env, args[10], &value_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (value_type == napi_number) {
-    if (argc == 12) {
-      NAPI_THROW_ERROR(env,
-                       "texSubImage3D srcOffset requires ArrayBufferView data");
-      return nullptr;
-    }
     size_t required_byte_count = 0;
     if (QueueInvalidStagedUnpackBoundsIfNeeded(
             context->eglContextWrapper_, &context->pending_errors_,
@@ -10228,7 +10213,7 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
     source_kind = TextureUploadSourceKind::kPixelUnpackBuffer;
   } else {
     uint32_t src_offset = 0;
-    if (argc == 12) {
+    if (argc >= 12) {
       nstatus =
           GetOptionalArrayOffsetParam(env, args[11], "srcOffset", &src_offset);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);

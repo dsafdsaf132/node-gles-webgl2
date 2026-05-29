@@ -219,14 +219,14 @@ inline bool EnsureValueIsArray(napi_env env, napi_value value, const char* file,
 
 inline bool EnsureArgc(napi_env env, size_t argc, size_t argc_exp,
                        const char* file, const size_t lineNumber) {
-  bool equals = argc == argc_exp;
-  if (!equals) {
+  bool enough = argc >= argc_exp;
+  if (!enough) {
     std::ostringstream oss;
-    oss << "Incorrect number of arguments (" << argc << " expected " << argc_exp
-        << ")";
+    oss << "Incorrect number of arguments (" << argc
+        << " received, expected at least " << argc_exp << ")";
     NapiThrowError(env, oss.str().c_str(), file, lineNumber);
   }
-  return equals;
+  return enough;
 }
 
 #define NAPI_DEFINE_METHOD(name, func) \

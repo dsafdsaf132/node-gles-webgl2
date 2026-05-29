@@ -764,6 +764,37 @@ function testDeleteNullNoOps(gl) {
   assertNoError(gl, "null delete no-ops");
 }
 
+function testExtraArgumentsAreIgnored(gl) {
+  gl.clearColor(0, 0, 0, 1, "ignored");
+  gl.viewport(0, 0, 16, 16, "ignored");
+  gl.scissor(0, 0, 16, 16, "ignored");
+
+  const shader = gl.createShader(gl.VERTEX_SHADER);
+  gl.shaderSource(shader, `
+attribute vec2 a_position;
+void main() {
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`, "ignored");
+  gl.compileShader(shader, "ignored");
+  assert.strictEqual(gl.getShaderParameter(shader, gl.COMPILE_STATUS), true);
+  gl.deleteShader(shader, 0, []);
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture, "ignored");
+  gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([255, 0, 0, 255]), 0, "ignored");
+  gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE,
+      {width: 1, height: 1, data: new Uint8Array([0, 255, 0, 255])},
+      "ignored", "ignored", "ignored");
+  gl.deleteTexture(texture, "ignored");
+
+  assertNoError(gl, "extra arguments ignored");
+  assert.throws(() => gl.clearColor(0, 0, 0), /Incorrect number of arguments/);
+}
+
 function testDeleteSyncUsesOwningContext() {
   const gl1 = createContext({width: 4, height: 4});
   const sync = gl1.fenceSync(gl1.SYNC_GPU_COMMANDS_COMPLETE, 0);
@@ -1338,6 +1369,7 @@ testExtensionAliasCalls(gl);
 testWebGLOnlyPixelStore(gl);
 testWebGLUnpackTransforms(gl);
 testDeleteNullNoOps(gl);
+testExtraArgumentsAreIgnored(gl);
 testVertexArrayState(gl);
 testInstancedDrawing(gl, false);
 testInstancedDrawing(gl, true);
