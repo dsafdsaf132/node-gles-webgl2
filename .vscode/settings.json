@@ -56,5 +56,9 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "clang-format.executable": "${workspaceRoot}/node_modules/.bin/clang-format",
   "C_Cpp.intelliSenseEngineFallback": "Enabled",
-  "editor.formatOnSave": true
+  "editor.formatOnSave": true,
+  "markdown.validate.enabled": false,
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
 }

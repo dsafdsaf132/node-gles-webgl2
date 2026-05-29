@@ -8,8 +8,6 @@ through WebGL2-compatible JavaScript method names.
 
 ## WebGL2 Coverage
 
-Status: ✅ implemented, 🟡 partial or backend-dependent, ❌ not guaranteed.
-
 | Feature | Status |
 | --- | --- |
 | WebGL1 API surface | ✅ |
@@ -17,9 +15,8 @@ Status: ✅ implemented, 🟡 partial or backend-dependent, ❌ not guaranteed.
 | WebGL2-compatible method names | 🟡 |
 | Vertex array objects | ✅ |
 | Instanced rendering | ✅ |
-| Extension aliases (`ANGLE_instanced_arrays`, `OES_vertex_array_object`, `WEBGL_draw_buffers`) | ✅ |
+| WebGL1 extension compatibility aliases (`ANGLE_instanced_arrays`, `OES_vertex_array_object`, `WEBGL_draw_buffers`) | ✅ |
 | Draw buffers | ✅ |
-| Context cleanup (`destroy()` / `dispose()`) | ✅ |
 | Multisample framebuffer operations | 🟡 |
 | 3D textures and 2D texture arrays | 🟡 |
 | Typed-array texture upload offsets | 🟡 |
@@ -59,7 +56,7 @@ const gl = nodeGles.createWebGLRenderingContext({
   width: 800,
   height: 500,
   majorVersion: 3,
-  minorVersion: 0
+  minorVersion: 0,
 });
 
 console.log(gl.getParameter(gl.VERSION));
@@ -109,10 +106,10 @@ sudo apt-get install -y build-essential python3 libx11-dev
 
 ## Platform Support
 
-| Platform | Status |
-| --- | --- |
-| Linux x64 | CI-tested. Requires X11 development headers for native builds. |
-| macOS x64 | Installer path exists, but CI does not currently cover it. |
+| Platform    | Status                                                                                                                    |
+| ----------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Linux x64   | CI-tested. Requires X11 development headers for native builds.                                                            |
+| macOS x64   | Installer path exists, but CI does not currently cover it.                                                                |
 | Windows x64 | Installer path exists and copies ANGLE runtime DLLs next to the native addon after build. CI does not currently cover it. |
 
 ## License
