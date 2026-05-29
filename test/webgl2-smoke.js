@@ -1190,6 +1190,142 @@ function testWebGLUnpackTransforms(gl) {
   assertNoError(gl, "WebGL unpack transform uploads");
 }
 
+function testFragmentShaderGpgpuMatrixMultiply(gl) {
+  const matrixA = [
+    [1, 2, 0, 1],
+    [0, 1, 3, 2],
+    [2, 0, 1, 1],
+    [1, 1, 1, 0]
+  ];
+  const matrixB = [
+    [1, 0, 2, 1],
+    [3, 1, 0, 2],
+    [0, 2, 1, 1],
+    [1, 1, 1, 0]
+  ];
+
+  function matrixToTextureData(matrix) {
+    const data = new Uint8Array(4 * 4 * 4);
+    for (let row = 0; row < 4; ++row) {
+      for (let col = 0; col < 4; ++col) {
+        const offset = (row * 4 + col) * 4;
+        data[offset] = matrix[row][col];
+        data[offset + 3] = 255;
+      }
+    }
+    return data;
+  }
+
+  function createMatrixTexture(matrix) {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    configureTexture(gl, gl.TEXTURE_2D);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA,
+                  gl.UNSIGNED_BYTE, matrixToTextureData(matrix));
+    return texture;
+  }
+
+  const program = createProgramFromSources(gl, `#version 300 es
+precision highp float;
+in vec2 a_position;
+void main() {
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+precision highp int;
+uniform sampler2D u_a;
+uniform sampler2D u_b;
+out vec4 out_color;
+void main() {
+  ivec2 cell = ivec2(gl_FragCoord.xy);
+  if (cell.x >= 4 || cell.y >= 4) {
+    out_color = vec4(0.0, 0.0, 0.0, 1.0);
+    return;
+  }
+
+  float sum = 0.0;
+  for (int k = 0; k < 4; ++k) {
+    float a = texelFetch(u_a, ivec2(k, cell.y), 0).r * 255.0;
+    float b = texelFetch(u_b, ivec2(cell.x, k), 0).r * 255.0;
+    sum += a * b;
+  }
+
+  out_color = vec4(sum * 16.0 / 255.0,
+                   float(cell.y * 48) / 255.0,
+                   float(cell.x * 48) / 255.0,
+                   1.0);
+}
+`);
+  const textureA = createMatrixTexture(matrixA);
+  const textureB = createMatrixTexture(matrixB);
+  const outputTexture = gl.createTexture();
+  const framebuffer = gl.createFramebuffer();
+  const vao = gl.createVertexArray();
+  const positionBuffer = gl.createBuffer();
+
+  gl.bindTexture(gl.TEXTURE_2D, outputTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 16, 16, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, outputTexture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+
+  gl.viewport(0, 0, 16, 16);
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]),
+                gl.STATIC_DRAW);
+  const positionLocation = gl.getAttribLocation(program, "a_position");
+  assert(positionLocation >= 0, "GPGPU position attribute not found");
+  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(positionLocation);
+
+  gl.useProgram(program);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, textureA);
+  gl.uniform1i(gl.getUniformLocation(program, "u_a"), 0);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, textureB);
+  gl.uniform1i(gl.getUniformLocation(program, "u_b"), 1);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  const pixel = new Uint8Array(4);
+  for (let row = 0; row < 4; ++row) {
+    for (let col = 0; col < 4; ++col) {
+      let expectedValue = 0;
+      for (let k = 0; k < 4; ++k) {
+        expectedValue += matrixA[row][k] * matrixB[k][col];
+      }
+      gl.readPixels(col, row, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+      assertPixelNear(
+          pixel, [expectedValue * 16, row * 48, col * 48, 255],
+          `GPGPU matrix multiply [${row}, ${col}]`, 1);
+    }
+  }
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindVertexArray(null);
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  gl.activeTexture(gl.TEXTURE1);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.activeTexture(gl.TEXTURE0);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.deleteBuffer(positionBuffer);
+  gl.deleteVertexArray(vao);
+  gl.deleteFramebuffer(framebuffer);
+  gl.deleteTexture(outputTexture);
+  gl.deleteTexture(textureB);
+  gl.deleteTexture(textureA);
+  gl.deleteProgram(program);
+  assertNoError(gl, "fragment shader GPGPU matrix multiply");
+}
+
 function testVertexArrayState(gl) {
   const vao = gl.createVertexArray();
   const buffer = gl.createBuffer();
@@ -1368,6 +1504,7 @@ testNonSquareUniformMatrices(gl);
 testExtensionAliasCalls(gl);
 testWebGLOnlyPixelStore(gl);
 testWebGLUnpackTransforms(gl);
+testFragmentShaderGpgpuMatrixMultiply(gl);
 testDeleteNullNoOps(gl);
 testExtraArgumentsAreIgnored(gl);
 testVertexArrayState(gl);
