@@ -545,6 +545,8 @@ void main() {
 `);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, 16, 16);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(program);
   gl.uniform1ui(gl.getUniformLocation(program, "u_scalar"), 7);
   gl.uniform4uiv(
@@ -579,6 +581,8 @@ void main() {
 `);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, 16, 16);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(program);
   gl.uniformMatrix2x3fv(
       gl.getUniformLocation(program, "u_m23"), false,
