@@ -459,6 +459,9 @@ function testPixelBufferObjectNumericOffsets(gl) {
   const packBuffer = gl.createBuffer();
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, packBuffer);
   gl.bufferData(gl.PIXEL_PACK_BUFFER, new Uint8Array(8), gl.STREAM_READ);
+  assert.throws(
+      () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 4, 0),
+      /readPixels dstOffset requires ArrayBufferView data/);
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 4);
   const packed = new Uint8Array(8);
   gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, packed);

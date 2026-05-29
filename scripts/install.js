@@ -76,17 +76,24 @@ async function ensureDir(dirPath) {
 }
 
 async function unlinkIfExists(filePath) {
-  if (await exists(filePath)) {
+  try {
     await unlink(filePath);
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') {
+      throw err;
+    }
   }
 }
 
 async function renameIfExists(source, destination) {
-  if (!await exists(source)) {
-    return;
+  try {
+    await unlinkIfExists(destination);
+    await rename(source, destination);
+  } catch (err) {
+    if (!err || err.code !== 'ENOENT') {
+      throw err;
+    }
   }
-  await unlinkIfExists(destination);
-  await rename(source, destination);
 }
 
 async function copyRequiredWindowsDlls() {
@@ -106,17 +113,28 @@ async function copyRequiredWindowsDlls() {
 }
 
 async function hasRequiredAngleFiles() {
-  let requiredFiles;
+  let requiredReleaseFiles;
   if (platform === 'win32') {
-    requiredFiles = ['libEGL.dll', 'libGLESv2.dll', 'libEGL.lib',
+    requiredReleaseFiles = ['libEGL.dll', 'libGLESv2.dll', 'libEGL.lib',
       'libGLESv2.lib'];
   } else if (platform === 'darwin') {
-    requiredFiles = ['libEGL.dylib', 'libGLESv2.dylib'];
+    requiredReleaseFiles = ['libEGL.dylib', 'libGLESv2.dylib'];
   } else {
-    requiredFiles = ['libEGL.so', 'libGLESv2.so'];
+    requiredReleaseFiles = ['libEGL.so', 'libGLESv2.so'];
   }
-  for (const fileName of requiredFiles) {
+  for (const fileName of requiredReleaseFiles) {
     if (!await exists(path.join(angleReleasePath, fileName))) {
+      return false;
+    }
+  }
+  const requiredHeaders = [
+    'include/EGL/egl.h',
+    'include/GLES2/gl2.h',
+    'include/GLES3/gl3.h',
+    'include/GLES3/gl32.h'
+  ];
+  for (const fileName of requiredHeaders) {
+    if (!await exists(path.join(depsPath, 'angle', fileName))) {
       return false;
     }
   }
@@ -160,10 +178,7 @@ async function hasReusableAngleFiles() {
         metadata.sha256 === (process.env.NODE_GLES_ANGLE_SHA256 || null);
   }
 
-  const hasInstallOverride = Boolean(process.env.NODE_GLES_ANGLE_VERSION) ||
-      Boolean(process.env.NODE_GLES_ANGLE_BASE_URI) ||
-      Boolean(process.env.NODE_GLES_ANGLE_SHA256);
-  return !hasInstallOverride;
+  return false;
 }
 
 function assertSafeTarEntries(tempFileName) {
@@ -215,9 +230,23 @@ function createHttpsOptions(uri) {
   return options;
 }
 
-function downloadFile(uri, tempFileName) {
+function downloadFile(uri, tempFileName, redirectsRemaining = 5) {
   return new Promise((resolve, reject) => {
     const request = https.get(createHttpsOptions(uri), response => {
+      if (response.statusCode >= 300 && response.statusCode < 400 &&
+          response.headers.location) {
+        response.resume();
+        if (redirectsRemaining <= 0) {
+          reject(new Error(`Too many ANGLE download redirects: ${uri}`));
+          return;
+        }
+        const redirectedUri =
+            new URL(response.headers.location, uri).toString();
+        downloadFile(redirectedUri, tempFileName, redirectsRemaining - 1)
+            .then(resolve, reject);
+        return;
+      }
+
       if (response.statusCode < 200 || response.statusCode >= 300) {
         response.resume();
         reject(new Error(
