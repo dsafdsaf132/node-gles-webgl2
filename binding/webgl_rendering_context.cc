@@ -6144,6 +6144,60 @@ static napi_status CreateWEBGLDrawBuffersAlias(napi_env env, napi_value context,
   return napi_ok;
 }
 
+// Keep selected WebGL1 extension aliases available on GLES3/WebGL2 contexts so
+// browser-oriented WebGL1 and WebGL2 glue can use the same runtime.
+static const char *const kKnownWebGLExtensions[] = {
+    "ANGLE_instanced_arrays",
+    "EXT_blend_minmax",
+    "EXT_color_buffer_float",
+    "WEBGL_color_buffer_float",
+    "EXT_color_buffer_half_float",
+    "EXT_frag_depth",
+    "EXT_sRGB",
+    "EXT_shader_texture_lod",
+    "EXT_texture_filter_anisotropic",
+    "OES_element_index_uint",
+    "OES_standard_derivatives",
+    "OES_texture_float",
+    "OES_texture_float_linear",
+    "OES_texture_half_float",
+    "OES_texture_half_float_linear",
+    "OES_vertex_array_object",
+    "WEBGL_debug_renderer_info",
+    "WEBGL_depth_texture",
+    "WEBGL_draw_buffers",
+    "WEBGL_lose_context",
+};
+
+static char ToLowerASCII(char c) {
+  if (c >= 'A' && c <= 'Z') {
+    return c - 'A' + 'a';
+  }
+  return c;
+}
+
+static bool ExtensionNameEqualsIgnoringCase(const std::string &input,
+                                            const char *extension) {
+  size_t i = 0;
+  while (i < input.size() && extension[i] != '\0') {
+    if (ToLowerASCII(input[i]) != ToLowerASCII(extension[i])) {
+      return false;
+    }
+    ++i;
+  }
+  return i == input.size() && extension[i] == '\0';
+}
+
+static const char *CanonicalWebGLExtensionName(
+    const std::string &extension_name) {
+  for (const char *extension : kKnownWebGLExtensions) {
+    if (ExtensionNameEqualsIgnoringCase(extension_name, extension)) {
+      return extension;
+    }
+  }
+  return nullptr;
+}
+
 static bool IsWebGLExtensionSupported(EGLContextWrapper *egl_ctx,
                                       const char *name) {
   if (strcmp(name, "ANGLE_instanced_arrays") == 0) {
@@ -6244,16 +6298,16 @@ napi_value WebGLRenderingContext::GetExtension(napi_env env,
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  // TODO(kreeger): Extension stuff is super funny w/ WebGL vs. ANGLE. Many
-  // different names and matching that needs to be done in this binding.
-
-  const char *name = extension_name.c_str();
+  const char *name = CanonicalWebGLExtensionName(extension_name);
   EGLContextWrapper *egl_ctx = context->eglContextWrapper_;
 
   napi_value webgl_extension = nullptr;
-  if (strcmp(name, "ANGLE_instanced_arrays") == 0 &&
-      egl_ctx->glDrawArraysInstanced && egl_ctx->glDrawElementsInstanced &&
-      egl_ctx->glVertexAttribDivisor) {
+  if (name == nullptr) {
+    nstatus = napi_get_null(env, &webgl_extension);
+  } else if (strcmp(name, "ANGLE_instanced_arrays") == 0 &&
+             egl_ctx->glDrawArraysInstanced &&
+             egl_ctx->glDrawElementsInstanced &&
+             egl_ctx->glVertexAttribDivisor) {
     nstatus = CreateANGLEInstancedArraysAlias(env, js_this, &webgl_extension);
   } else if (strcmp(name, "OES_vertex_array_object") == 0 &&
              egl_ctx->glGenVertexArrays && egl_ctx->glDeleteVertexArrays &&
@@ -6334,7 +6388,6 @@ napi_value WebGLRenderingContext::GetExtension(napi_env env,
       WebGLLoseContextExtension::SetContextRef(env, webgl_extension, js_this);
     }
   } else {
-    fprintf(stderr, "Unsupported extension: %s\n", name);
     nstatus = napi_get_null(env, &webgl_extension);
   }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -7779,41 +7832,7 @@ napi_value WebGLRenderingContext::GetSupportedExtensions(
   context->eglContextWrapper_->RefreshGLExtensions();
 
   std::vector<std::string> supported_extensions;
-  std::string s(context->eglContextWrapper_->angle_requestable_extensions
-                    ->GetExtensions());
-  const std::string delim = " ";
-  size_t pos = 0;
-  std::string token;
-  while ((pos = s.find(delim)) != std::string::npos) {
-    token = s.substr(0, pos);
-    s.erase(0, pos + delim.length());
-    AddUniqueExtension(&supported_extensions, token.c_str());
-  }
-  AddUniqueExtension(&supported_extensions, s.c_str());
-
-  const char *known_extensions[] = {
-      "ANGLE_instanced_arrays",
-      "EXT_blend_minmax",
-      "EXT_color_buffer_float",
-      "WEBGL_color_buffer_float",
-      "EXT_color_buffer_half_float",
-      "EXT_frag_depth",
-      "EXT_sRGB",
-      "EXT_shader_texture_lod",
-      "EXT_texture_filter_anisotropic",
-      "OES_element_index_uint",
-      "OES_standard_derivatives",
-      "OES_texture_float",
-      "OES_texture_float_linear",
-      "OES_texture_half_float",
-      "OES_texture_half_float_linear",
-      "OES_vertex_array_object",
-      "WEBGL_debug_renderer_info",
-      "WEBGL_depth_texture",
-      "WEBGL_draw_buffers",
-      "WEBGL_lose_context",
-  };
-  for (const char *extension : known_extensions) {
+  for (const char *extension : kKnownWebGLExtensions) {
     if (IsWebGLExtensionSupported(context->eglContextWrapper_, extension)) {
       AddUniqueExtension(&supported_extensions, extension);
     }
