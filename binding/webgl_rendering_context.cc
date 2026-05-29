@@ -6145,29 +6145,12 @@ static napi_status CreateWEBGLDrawBuffersAlias(napi_env env, napi_value context,
   return napi_ok;
 }
 
-// Keep selected WebGL1 extension aliases available on GLES3/WebGL2 contexts so
-// browser-oriented WebGL1 and WebGL2 glue can use the same runtime.
-static const char *const kKnownWebGLExtensions[] = {
-    "ANGLE_instanced_arrays",
-    "EXT_blend_minmax",
-    "EXT_color_buffer_float",
-    "WEBGL_color_buffer_float",
-    "EXT_color_buffer_half_float",
-    "EXT_frag_depth",
-    "EXT_sRGB",
-    "EXT_shader_texture_lod",
-    "EXT_texture_filter_anisotropic",
-    "OES_element_index_uint",
-    "OES_standard_derivatives",
-    "OES_texture_float",
-    "OES_texture_float_linear",
-    "OES_texture_half_float",
-    "OES_texture_half_float_linear",
-    "OES_vertex_array_object",
-    "WEBGL_debug_renderer_info",
-    "WEBGL_depth_texture",
-    "WEBGL_draw_buffers",
-    "WEBGL_lose_context",
+struct WebGLExtensionDescriptor {
+  const char *name;
+  bool (*is_supported)(EGLContextWrapper *egl_ctx);
+  napi_status (*new_instance)(napi_env env, napi_value js_this,
+                              EGLContextWrapper *egl_ctx,
+                              napi_value *extension);
 };
 
 static char ToLowerASCII(char c) {
@@ -6189,81 +6172,144 @@ static bool ExtensionNameEqualsIgnoringCase(const std::string &input,
   return i == input.size() && extension[i] == '\0';
 }
 
-static const char *CanonicalWebGLExtensionName(
+static bool SupportsANGLEInstancedArrays(EGLContextWrapper *egl_ctx) {
+  return (egl_ctx->glDrawArraysInstanced && egl_ctx->glDrawElementsInstanced &&
+          egl_ctx->glVertexAttribDivisor) ||
+         ANGLEInstancedArraysExtension::IsSupported(egl_ctx);
+}
+
+static napi_status NewANGLEInstancedArrays(napi_env env, napi_value js_this,
+                                           EGLContextWrapper *egl_ctx,
+                                           napi_value *extension) {
+  if (egl_ctx->glDrawArraysInstanced && egl_ctx->glDrawElementsInstanced &&
+      egl_ctx->glVertexAttribDivisor) {
+    return CreateANGLEInstancedArraysAlias(env, js_this, extension);
+  }
+  return ANGLEInstancedArraysExtension::NewInstance(env, extension, egl_ctx);
+}
+
+static bool SupportsOESVertexArrayObject(EGLContextWrapper *egl_ctx) {
+  return egl_ctx->glGenVertexArrays && egl_ctx->glDeleteVertexArrays &&
+         egl_ctx->glIsVertexArray && egl_ctx->glBindVertexArray;
+}
+
+static napi_status NewOESVertexArrayObject(napi_env env, napi_value js_this,
+                                           EGLContextWrapper *egl_ctx,
+                                           napi_value *extension) {
+  (void)egl_ctx;
+  return CreateOESVertexArrayObjectAlias(env, js_this, extension);
+}
+
+static bool SupportsWEBGLDrawBuffers(EGLContextWrapper *egl_ctx) {
+  return egl_ctx->glDrawBuffers != nullptr;
+}
+
+static napi_status NewWEBGLDrawBuffers(napi_env env, napi_value js_this,
+                                       EGLContextWrapper *egl_ctx,
+                                       napi_value *extension) {
+  (void)egl_ctx;
+  return CreateWEBGLDrawBuffersAlias(env, js_this, extension);
+}
+
+#define DEFINE_EXTENSION_DESCRIPTOR_HELPERS(helper_name, class_name)    \
+  static bool Supports##helper_name(EGLContextWrapper *egl_ctx) {       \
+    return class_name::IsSupported(egl_ctx);                            \
+  }                                                                     \
+                                                                        \
+  static napi_status New##helper_name(napi_env env, napi_value js_this, \
+                                      EGLContextWrapper *egl_ctx,       \
+                                      napi_value *extension) {          \
+    (void)js_this;                                                      \
+    return class_name::NewInstance(env, extension, egl_ctx);            \
+  }
+
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTBlendMinmax, EXTBlendMinmaxExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTColorBufferFloat,
+                                    EXTColorBufferFloatExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTColorBufferHalfFloat,
+                                    EXTColorBufferHalfFloatExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTFragDepth, EXTFragDepthExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTSRGB, EXTSRGBExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTShaderTextureLod,
+                                    EXTShaderTextureLodExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTTextureFilterAnisotropic,
+                                    EXTTextureFilterAnisotropicExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESElementIndexUint,
+                                    OESElementIndexUintExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESStandardDerivatives,
+                                    OESStandardDerivativesExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESTextureFloat, OESTextureFloatExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESTextureFloatLinear,
+                                    OESTextureFloatLinearExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESTextureHalfFloat,
+                                    OESTextureHalfFloatExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESTextureHalfFloatLinear,
+                                    OESTextureHalfFloatLinearExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(WebGLDebugRendererInfo,
+                                    WebGLDebugRendererInfoExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(WebGLDepthTexture,
+                                    WebGLDepthTextureExtension)
+
+#undef DEFINE_EXTENSION_DESCRIPTOR_HELPERS
+
+static napi_status NewWebGLLoseContext(napi_env env, napi_value js_this,
+                                       EGLContextWrapper *egl_ctx,
+                                       napi_value *extension) {
+  napi_status status =
+      WebGLLoseContextExtension::NewInstance(env, extension, egl_ctx);
+  if (status == napi_ok) {
+    WebGLLoseContextExtension::SetContextRef(env, *extension, js_this);
+  }
+  return status;
+}
+
+// Keep selected WebGL1 extension aliases available on GLES3/WebGL2 contexts so
+// browser-oriented WebGL1 and WebGL2 glue can use the same runtime.
+static const WebGLExtensionDescriptor kKnownWebGLExtensions[] = {
+    {"ANGLE_instanced_arrays", SupportsANGLEInstancedArrays,
+     NewANGLEInstancedArrays},
+    {"EXT_blend_minmax", SupportsEXTBlendMinmax, NewEXTBlendMinmax},
+    {"EXT_color_buffer_float", SupportsEXTColorBufferFloat,
+     NewEXTColorBufferFloat},
+    {"WEBGL_color_buffer_float", SupportsEXTColorBufferFloat,
+     NewEXTColorBufferFloat},
+    {"EXT_color_buffer_half_float", SupportsEXTColorBufferHalfFloat,
+     NewEXTColorBufferHalfFloat},
+    {"EXT_frag_depth", SupportsEXTFragDepth, NewEXTFragDepth},
+    {"EXT_sRGB", SupportsEXTSRGB, NewEXTSRGB},
+    {"EXT_shader_texture_lod", SupportsEXTShaderTextureLod,
+     NewEXTShaderTextureLod},
+    {"EXT_texture_filter_anisotropic", SupportsEXTTextureFilterAnisotropic,
+     NewEXTTextureFilterAnisotropic},
+    {"OES_element_index_uint", SupportsOESElementIndexUint,
+     NewOESElementIndexUint},
+    {"OES_standard_derivatives", SupportsOESStandardDerivatives,
+     NewOESStandardDerivatives},
+    {"OES_texture_float", SupportsOESTextureFloat, NewOESTextureFloat},
+    {"OES_texture_float_linear", SupportsOESTextureFloatLinear,
+     NewOESTextureFloatLinear},
+    {"OES_texture_half_float", SupportsOESTextureHalfFloat,
+     NewOESTextureHalfFloat},
+    {"OES_texture_half_float_linear", SupportsOESTextureHalfFloatLinear,
+     NewOESTextureHalfFloatLinear},
+    {"OES_vertex_array_object", SupportsOESVertexArrayObject,
+     NewOESVertexArrayObject},
+    {"WEBGL_debug_renderer_info", SupportsWebGLDebugRendererInfo,
+     NewWebGLDebugRendererInfo},
+    {"WEBGL_depth_texture", SupportsWebGLDepthTexture, NewWebGLDepthTexture},
+    {"WEBGL_draw_buffers", SupportsWEBGLDrawBuffers, NewWEBGLDrawBuffers},
+    {"WEBGL_lose_context", WebGLLoseContextExtension::IsSupported,
+     NewWebGLLoseContext},
+};
+
+static const WebGLExtensionDescriptor *CanonicalWebGLExtension(
     const std::string &extension_name) {
-  for (const char *extension : kKnownWebGLExtensions) {
-    if (ExtensionNameEqualsIgnoringCase(extension_name, extension)) {
-      return extension;
+  for (const WebGLExtensionDescriptor &extension : kKnownWebGLExtensions) {
+    if (ExtensionNameEqualsIgnoringCase(extension_name, extension.name)) {
+      return &extension;
     }
   }
   return nullptr;
-}
-
-static bool IsWebGLExtensionSupported(EGLContextWrapper *egl_ctx,
-                                      const char *name) {
-  if (strcmp(name, "ANGLE_instanced_arrays") == 0) {
-    return (egl_ctx->glDrawArraysInstanced &&
-            egl_ctx->glDrawElementsInstanced &&
-            egl_ctx->glVertexAttribDivisor) ||
-           ANGLEInstancedArraysExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "OES_vertex_array_object") == 0) {
-    return egl_ctx->glGenVertexArrays && egl_ctx->glDeleteVertexArrays &&
-           egl_ctx->glIsVertexArray && egl_ctx->glBindVertexArray;
-  }
-  if (strcmp(name, "WEBGL_draw_buffers") == 0) {
-    return egl_ctx->glDrawBuffers != nullptr;
-  }
-  if (strcmp(name, "EXT_blend_minmax") == 0) {
-    return EXTBlendMinmaxExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "EXT_color_buffer_float") == 0 ||
-      strcmp(name, "WEBGL_color_buffer_float") == 0) {
-    return EXTColorBufferFloatExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "EXT_color_buffer_half_float") == 0) {
-    return EXTColorBufferHalfFloatExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "EXT_frag_depth") == 0) {
-    return EXTFragDepthExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "EXT_sRGB") == 0) {
-    return EXTSRGBExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "EXT_shader_texture_lod") == 0) {
-    return EXTShaderTextureLodExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "EXT_texture_filter_anisotropic") == 0) {
-    return EXTTextureFilterAnisotropicExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "OES_element_index_uint") == 0) {
-    return OESElementIndexUintExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "OES_standard_derivatives") == 0) {
-    return OESStandardDerivativesExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "OES_texture_float") == 0) {
-    return OESTextureFloatExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "OES_texture_float_linear") == 0) {
-    return OESTextureFloatLinearExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "OES_texture_half_float") == 0) {
-    return OESTextureHalfFloatExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "OES_texture_half_float_linear") == 0) {
-    return OESTextureHalfFloatLinearExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "WEBGL_debug_renderer_info") == 0) {
-    return WebGLDebugRendererInfoExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "WEBGL_depth_texture") == 0) {
-    return WebGLDepthTextureExtension::IsSupported(egl_ctx);
-  }
-  if (strcmp(name, "WEBGL_lose_context") == 0) {
-    return WebGLLoseContextExtension::IsSupported(egl_ctx);
-  }
-  return false;
 }
 
 static void AddUniqueExtension(std::vector<std::string> *extensions,
@@ -6299,95 +6345,13 @@ napi_value WebGLRenderingContext::GetExtension(napi_env env,
   nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  const char *name = CanonicalWebGLExtensionName(extension_name);
+  const WebGLExtensionDescriptor *extension =
+      CanonicalWebGLExtension(extension_name);
   EGLContextWrapper *egl_ctx = context->eglContextWrapper_;
 
   napi_value webgl_extension = nullptr;
-  if (name == nullptr) {
-    nstatus = napi_get_null(env, &webgl_extension);
-  } else if (strcmp(name, "ANGLE_instanced_arrays") == 0 &&
-             egl_ctx->glDrawArraysInstanced &&
-             egl_ctx->glDrawElementsInstanced &&
-             egl_ctx->glVertexAttribDivisor) {
-    nstatus = CreateANGLEInstancedArraysAlias(env, js_this, &webgl_extension);
-  } else if (strcmp(name, "OES_vertex_array_object") == 0 &&
-             egl_ctx->glGenVertexArrays && egl_ctx->glDeleteVertexArrays &&
-             egl_ctx->glIsVertexArray && egl_ctx->glBindVertexArray) {
-    nstatus = CreateOESVertexArrayObjectAlias(env, js_this, &webgl_extension);
-  } else if (strcmp(name, "WEBGL_draw_buffers") == 0 &&
-             egl_ctx->glDrawBuffers) {
-    nstatus = CreateWEBGLDrawBuffersAlias(env, js_this, &webgl_extension);
-  } else if (strcmp(name, "ANGLE_instanced_arrays") == 0 &&
-             ANGLEInstancedArraysExtension::IsSupported(egl_ctx)) {
-    nstatus = ANGLEInstancedArraysExtension::NewInstance(env, &webgl_extension,
-                                                         egl_ctx);
-  } else if (strcmp(name, "EXT_blend_minmax") == 0 &&
-             EXTBlendMinmaxExtension::IsSupported(egl_ctx)) {
-    nstatus =
-        EXTBlendMinmaxExtension::NewInstance(env, &webgl_extension, egl_ctx);
-  } else if ((strcmp(name, "EXT_color_buffer_float") == 0 ||
-              strcmp(name, "WEBGL_color_buffer_float") == 0) &&
-             EXTColorBufferFloatExtension::IsSupported(egl_ctx)) {
-    nstatus = EXTColorBufferFloatExtension::NewInstance(env, &webgl_extension,
-                                                        egl_ctx);
-  } else if (strcmp(name, "EXT_color_buffer_half_float") == 0 &&
-             EXTColorBufferHalfFloatExtension::IsSupported(egl_ctx)) {
-    nstatus = EXTColorBufferHalfFloatExtension::NewInstance(
-        env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "EXT_frag_depth") == 0 &&
-             EXTFragDepthExtension::IsSupported(egl_ctx)) {
-    nstatus =
-        EXTFragDepthExtension::NewInstance(env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "EXT_sRGB") == 0 &&
-             EXTSRGBExtension::IsSupported(egl_ctx)) {
-    nstatus = EXTSRGBExtension::NewInstance(env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "EXT_shader_texture_lod") == 0 &&
-             EXTShaderTextureLodExtension::IsSupported(egl_ctx)) {
-    nstatus = EXTShaderTextureLodExtension::NewInstance(env, &webgl_extension,
-                                                        egl_ctx);
-  } else if (strcmp(name, "EXT_texture_filter_anisotropic") == 0 &&
-             EXTTextureFilterAnisotropicExtension::IsSupported(egl_ctx)) {
-    nstatus = EXTTextureFilterAnisotropicExtension::NewInstance(
-        env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "OES_element_index_uint") == 0 &&
-             OESElementIndexUintExtension::IsSupported(egl_ctx)) {
-    nstatus = OESElementIndexUintExtension::NewInstance(env, &webgl_extension,
-                                                        egl_ctx);
-  } else if (strcmp(name, "OES_standard_derivatives") == 0 &&
-             OESStandardDerivativesExtension::IsSupported(egl_ctx)) {
-    nstatus = OESStandardDerivativesExtension::NewInstance(
-        env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "OES_texture_float") == 0 &&
-             OESTextureFloatExtension::IsSupported(egl_ctx)) {
-    nstatus =
-        OESTextureFloatExtension::NewInstance(env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "OES_texture_float_linear") == 0 &&
-             OESTextureFloatLinearExtension::IsSupported(egl_ctx)) {
-    nstatus = OESTextureFloatLinearExtension::NewInstance(env, &webgl_extension,
-                                                          egl_ctx);
-  } else if (strcmp(name, "OES_texture_half_float") == 0 &&
-             OESTextureHalfFloatExtension::IsSupported(egl_ctx)) {
-    nstatus = OESTextureHalfFloatExtension::NewInstance(env, &webgl_extension,
-                                                        egl_ctx);
-  } else if (strcmp(name, "OES_texture_half_float_linear") == 0 &&
-             OESTextureHalfFloatLinearExtension::IsSupported(egl_ctx)) {
-    nstatus = OESTextureHalfFloatLinearExtension::NewInstance(
-        env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "WEBGL_debug_renderer_info") == 0 &&
-             WebGLDebugRendererInfoExtension::IsSupported(egl_ctx)) {
-    nstatus = WebGLDebugRendererInfoExtension::NewInstance(
-        env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "WEBGL_depth_texture") == 0 &&
-             WebGLDepthTextureExtension::IsSupported(egl_ctx)) {
-    nstatus =
-        WebGLDepthTextureExtension::NewInstance(env, &webgl_extension, egl_ctx);
-  } else if (strcmp(name, "WEBGL_lose_context") == 0 &&
-             WebGLLoseContextExtension::IsSupported(egl_ctx)) {
-    nstatus =
-        WebGLLoseContextExtension::NewInstance(env, &webgl_extension, egl_ctx);
-    if (nstatus == napi_ok) {
-      WebGLLoseContextExtension::SetContextRef(env, webgl_extension, js_this);
-    }
+  if (extension != nullptr && extension->is_supported(egl_ctx)) {
+    nstatus = extension->new_instance(env, js_this, egl_ctx, &webgl_extension);
   } else {
     nstatus = napi_get_null(env, &webgl_extension);
   }
@@ -6608,6 +6572,7 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     case GL_ALIASED_LINE_WIDTH_RANGE:
     case GL_ALIASED_POINT_SIZE_RANGE:
     case GL_DEPTH_RANGE: {
+      ENSURE_GL_PROC_RETVAL(env, context, glGetFloatv, nullptr);
       GLfloat params[2] = {0, 0};
       context->eglContextWrapper_->glGetFloatv(name, params);
       napi_value params_value;
@@ -6619,6 +6584,7 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
 
     case GL_BLEND_COLOR:
     case GL_COLOR_CLEAR_VALUE: {
+      ENSURE_GL_PROC_RETVAL(env, context, glGetFloatv, nullptr);
       GLfloat params[4] = {0, 0, 0, 0};
       context->eglContextWrapper_->glGetFloatv(name, params);
       napi_value params_value;
@@ -6665,6 +6631,7 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     case GL_SAMPLE_COVERAGE_VALUE:
     case GL_MAX_TEXTURE_MAX_ANISOTROPY_EXT:
     case GL_MAX_TEXTURE_LOD_BIAS: {
+      ENSURE_GL_PROC_RETVAL(env, context, glGetFloatv, nullptr);
       GLfloat params = 0;
       context->eglContextWrapper_->glGetFloatv(name, &params);
       napi_value params_value;
@@ -7833,9 +7800,9 @@ napi_value WebGLRenderingContext::GetSupportedExtensions(
   context->eglContextWrapper_->RefreshGLExtensions();
 
   std::vector<std::string> supported_extensions;
-  for (const char *extension : kKnownWebGLExtensions) {
-    if (IsWebGLExtensionSupported(context->eglContextWrapper_, extension)) {
-      AddUniqueExtension(&supported_extensions, extension);
+  for (const WebGLExtensionDescriptor &extension : kKnownWebGLExtensions) {
+    if (extension.is_supported(context->eglContextWrapper_)) {
+      AddUniqueExtension(&supported_extensions, extension.name);
     }
   }
 
@@ -9075,6 +9042,11 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
   nstatus = napi_typeof(env, args[6], &pixels_type);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (pixels_type == napi_number) {
+    if (argc >= 8) {
+      NAPI_THROW_ERROR(env,
+                       "readPixels dstOffset requires ArrayBufferView data");
+      return nullptr;
+    }
     const void *offset_data = nullptr;
     size_t required_byte_count = 0;
     nstatus = GetRequiredPixelDataByteCount(env, context->pixel_store_state_,

@@ -105,6 +105,24 @@ function assertPixelNear(pixel, expected, label, tolerance = 2) {
   }
 }
 
+function assertNumberNear(actual, expected, label, tolerance = 1e-6) {
+  assert.strictEqual(
+      typeof actual, "number", `${label}: expected number, got ${actual}`);
+  assert(
+      Math.abs(actual - expected) <= tolerance,
+      `${label}: expected ${expected}, got ${actual}`);
+}
+
+function assertArrayNear(actual, expected, label, tolerance = 1e-6) {
+  assert(Array.isArray(actual), `${label}: expected array, got ${actual}`);
+  assert.strictEqual(
+      actual.length, expected.length,
+      `${label}: expected length ${expected.length}, got ${actual.length}`);
+  for (let i = 0; i < expected.length; ++i) {
+    assertNumberNear(actual[i], expected[i], `${label}[${i}]`, tolerance);
+  }
+}
+
 function readTexture2DPixel(gl, texture, x, y) {
   const framebuffer = gl.createFramebuffer();
   gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
@@ -218,6 +236,41 @@ function testSupportedExtensionsReflectGetExtension(gl) {
   assert.notStrictEqual(gl.getExtension("angle_instanced_arrays"), null);
   assert.notStrictEqual(gl.getExtension("oes_vertex_array_object"), null);
   assert.notStrictEqual(gl.getExtension("webgl_draw_buffers"), null);
+
+  if (supported.includes("EXT_color_buffer_float") &&
+      supported.includes("WEBGL_color_buffer_float")) {
+    const extColorBufferFloat = gl.getExtension("EXT_color_buffer_float");
+    const webglColorBufferFloat = gl.getExtension("WEBGL_color_buffer_float");
+    assert.notStrictEqual(
+        extColorBufferFloat, null,
+        "EXT_color_buffer_float is listed but getExtension returned null");
+    assert.notStrictEqual(
+        webglColorBufferFloat, null,
+        "WEBGL_color_buffer_float is listed but getExtension returned null");
+
+    const colorBufferFloatConstants = [
+      ["RGBA32F_EXT", "RGBA32F"],
+      ["RGB32F_EXT", "RGB32F"],
+      [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE"
+      ],
+      ["UNSIGNED_NORMALIZED_EXT", "UNSIGNED_NORMALIZED"]
+    ];
+    for (const [extensionName, contextName] of colorBufferFloatConstants) {
+      assert.strictEqual(
+          extColorBufferFloat[extensionName],
+          webglColorBufferFloat[extensionName],
+          `${extensionName} should match across color buffer float aliases`);
+      if (webglColorBufferFloat[extensionName] !== undefined &&
+          gl[contextName] !== undefined) {
+        assert.strictEqual(
+            webglColorBufferFloat[extensionName], gl[contextName],
+            `${extensionName} should match ${contextName}`);
+      }
+    }
+  }
+
   assert.strictEqual(gl.getExtension("NOT_A_WEBGL_EXTENSION"), null);
   assertNoError(gl, "getExtension browser-compatible names");
 }
@@ -255,10 +308,45 @@ function testGetParameterSemantics(gl) {
   assert.deepStrictEqual(gl.getParameter(gl.COLOR_CLEAR_VALUE), [0, 0, 0, 0]);
   assert.deepStrictEqual(gl.getParameter(gl.BLEND_COLOR), [0, 0, 0, 0]);
   assert.deepStrictEqual(gl.getParameter(gl.DEPTH_RANGE), [0, 1]);
+  gl.clearColor(0.125, 0.25, 0.5, 0.875);
+  assertArrayNear(
+      gl.getParameter(gl.COLOR_CLEAR_VALUE), [0.125, 0.25, 0.5, 0.875],
+      "mutated COLOR_CLEAR_VALUE");
+  gl.blendColor(0.0625, 0.1875, 0.3125, 0.4375);
+  assertArrayNear(
+      gl.getParameter(gl.BLEND_COLOR), [0.0625, 0.1875, 0.3125, 0.4375],
+      "mutated BLEND_COLOR");
+  gl.depthRange(0.25, 0.75);
+  assertArrayNear(
+      gl.getParameter(gl.DEPTH_RANGE), [0.25, 0.75],
+      "mutated DEPTH_RANGE");
+
+  const lineWidthRange = gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE);
+  assert(Array.isArray(lineWidthRange));
+  const defaultLineWidth = gl.getParameter(gl.LINE_WIDTH);
+  assert.strictEqual(typeof defaultLineWidth, "number");
+  let testLineWidth = null;
+  if (lineWidthRange[1] > defaultLineWidth) {
+    testLineWidth = Math.min(lineWidthRange[1], defaultLineWidth + 1);
+  } else if (lineWidthRange[0] < defaultLineWidth) {
+    testLineWidth = lineWidthRange[0];
+  }
+  if (testLineWidth !== null &&
+      Math.abs(testLineWidth - defaultLineWidth) > 1e-6) {
+    gl.lineWidth(testLineWidth);
+    assertNumberNear(
+        gl.getParameter(gl.LINE_WIDTH), testLineWidth,
+        "mutated LINE_WIDTH", 1e-5);
+    gl.lineWidth(defaultLineWidth);
+  }
+  gl.clearColor(0, 0, 0, 0);
+  gl.blendColor(0, 0, 0, 0);
+  gl.depthRange(0, 1);
+  assertNoError(gl, "mutated float getParameter state");
+
   assert.deepStrictEqual(gl.getParameter(gl.COLOR_WRITEMASK),
                          [true, true, true, true]);
   assert.strictEqual(typeof gl.getParameter(gl.DEPTH_WRITEMASK), "boolean");
-  assert(Array.isArray(gl.getParameter(gl.ALIASED_LINE_WIDTH_RANGE)));
   assert(Array.isArray(gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS)));
 
   assert.strictEqual(gl.getParameter(gl.ARRAY_BUFFER_BINDING), 0);
@@ -269,8 +357,43 @@ function testGetParameterSemantics(gl) {
   assert(Number.isInteger(gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS)));
   assert(Number.isInteger(gl.getParameter(gl.MAX_TEXTURE_SIZE)));
   const maxDrawBuffers = gl.getParameter(gl.MAX_DRAW_BUFFERS);
+  const maxColorAttachments = gl.getParameter(gl.MAX_COLOR_ATTACHMENTS);
   assert(Number.isInteger(maxDrawBuffers));
+  assert(Number.isInteger(maxColorAttachments));
   assert.strictEqual(gl.getParameter(gl.DRAW_BUFFER0), gl.BACK);
+  if (maxDrawBuffers > 1 && maxColorAttachments > 1) {
+    const drawBufferTextures = [gl.createTexture(), gl.createTexture()];
+    for (const texture of drawBufferTextures) {
+      gl.bindTexture(gl.TEXTURE_2D, texture);
+      configureTexture(gl, gl.TEXTURE_2D);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                    gl.UNSIGNED_BYTE, null);
+    }
+
+    const drawBufferFramebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, drawBufferFramebuffer);
+    gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D,
+        drawBufferTextures[0], 0);
+    gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT1, gl.TEXTURE_2D,
+        drawBufferTextures[1], 0);
+    assert.strictEqual(
+        gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+    gl.drawBuffers([gl.COLOR_ATTACHMENT0, gl.COLOR_ATTACHMENT1]);
+    assert.strictEqual(
+        gl.getParameter(gl.DRAW_BUFFER0), gl.COLOR_ATTACHMENT0);
+    assert.strictEqual(
+        gl.getParameter(gl.DRAW_BUFFER1), gl.COLOR_ATTACHMENT1);
+
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    assert.strictEqual(gl.getParameter(gl.DRAW_BUFFER0), gl.BACK);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.deleteFramebuffer(drawBufferFramebuffer);
+    gl.deleteTexture(drawBufferTextures[0]);
+    gl.deleteTexture(drawBufferTextures[1]);
+    assertNoError(gl, "FBO draw buffer getParameter state");
+  }
   if (maxDrawBuffers > 1) {
     assert(Number.isInteger(gl.getParameter(
         gl.DRAW_BUFFER0 + maxDrawBuffers - 1)));
@@ -454,17 +577,38 @@ function testPixelBufferObjectNumericOffsets(gl) {
 
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   gl.viewport(0, 0, 16, 16);
-  gl.clearColor(0.25, 0.5, 0.75, 1.0);
+  gl.clearColor(1.0, 0.0, 0.0, 1.0);
   gl.clear(gl.COLOR_BUFFER_BIT);
   const packBuffer = gl.createBuffer();
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, packBuffer);
   gl.bufferData(gl.PIXEL_PACK_BUFFER, new Uint8Array(8), gl.STREAM_READ);
+  const packBufferBinding = gl.getParameter(gl.PIXEL_PACK_BUFFER_BINDING);
+  const readFramebufferBinding = gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
+  const drawFramebufferBinding = gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING);
+  assertNoError(gl, "readPixels invalid PBO overload setup");
+  assert.throws(
+      () => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 4, 0),
+      /readPixels dstOffset requires ArrayBufferView data/);
+  const afterInvalid = new Uint8Array(8);
+  gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, afterInvalid);
+  assert.deepStrictEqual(
+      Array.from(afterInvalid), [0, 0, 0, 0, 0, 0, 0, 0]);
+  assert.strictEqual(
+      gl.getParameter(gl.PIXEL_PACK_BUFFER_BINDING), packBufferBinding);
+  assert.strictEqual(
+      gl.getParameter(gl.READ_FRAMEBUFFER_BINDING), readFramebufferBinding);
+  assert.strictEqual(
+      gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING), drawFramebufferBinding);
+  assertNoError(gl, "readPixels invalid PBO overload side effects");
+
+  gl.clearColor(0.0, 1.0, 0.0, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 4);
   const packed = new Uint8Array(8);
   gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, packed);
   assert.deepStrictEqual(Array.from(packed.subarray(0, 4)), [0, 0, 0, 0]);
   assertPixelNear(
-      packed.subarray(4, 8), [64, 128, 191, 255],
+      packed.subarray(4, 8), [0, 255, 0, 255],
       "readPixels PBO numeric offset", 3);
 
   gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
