@@ -18,18 +18,18 @@ through WebGL2-compatible JavaScript method names.
 | Instanced rendering | ✅ |
 | WebGL1 extension compatibility aliases (`ANGLE_instanced_arrays`, `OES_vertex_array_object`, `WEBGL_draw_buffers`) | ✅ |
 | Draw buffers | ✅ |
-| Multisample framebuffer operations | 🟡 |
+| Multisample framebuffer operations | ✅ |
 | 3D textures and 2D texture arrays | 🟡 |
-| Typed-array texture upload offsets | 🟡 |
-| Pixel buffer object numeric offsets | 🟡 |
+| Typed-array texture upload offsets | ✅ |
+| Pixel buffer object numeric offsets | ✅ |
 | Buffer copy and readback | ✅ |
 | Transform feedback | 🟡 |
 | Query objects | 🟡 |
 | Sampler objects | ✅ |
 | Sync objects | ✅ |
 | Integer vertex attributes | 🟡 |
-| Unsigned integer uniforms | 🟡 |
-| Non-square uniform matrices | 🟡 |
+| Unsigned integer uniforms | ✅ |
+| Non-square uniform matrices | ✅ |
 | Browser-complete WebGL2 conformance | ❌ |
 
 ## Install
