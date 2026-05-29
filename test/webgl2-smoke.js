@@ -29,23 +29,9 @@ function compileShader(gl, type, source) {
   return shader;
 }
 
-function createProgram(gl) {
-  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, `#version 300 es
-precision highp float;
-in vec2 a_position;
-in vec2 a_offset;
-void main() {
-  gl_PointSize = 4.0;
-  gl_Position = vec4(a_position + a_offset, 0.0, 1.0);
-}
-`);
-  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
-precision highp float;
-out vec4 out_color;
-void main() {
-  out_color = vec4(1.0, 0.0, 0.0, 1.0);
-}
-`);
+function createProgramFromSources(gl, vertexSource, fragmentSource) {
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, vertexSource);
+  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, fragmentSource);
 
   const program = gl.createProgram();
   gl.attachShader(program, vertexShader);
@@ -55,6 +41,24 @@ void main() {
       gl.getProgramParameter(program, gl.LINK_STATUS), true,
       gl.getProgramInfoLog(program));
   return program;
+}
+
+function createProgram(gl) {
+  return createProgramFromSources(gl, `#version 300 es
+precision highp float;
+in vec2 a_position;
+in vec2 a_offset;
+void main() {
+  gl_PointSize = 4.0;
+  gl_Position = vec4(a_position + a_offset, 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+out vec4 out_color;
+void main() {
+  out_color = vec4(1.0, 0.0, 0.0, 1.0);
+}
+`);
 }
 
 function testInfoLogEmptyStrings(gl) {
@@ -171,6 +175,13 @@ function testSupportedExtensionsReflectGetExtension(gl) {
   assert.strictEqual(
       new Set(supported).size, supported.length,
       "getSupportedExtensions should not contain duplicates");
+  for (const name of supported) {
+    assert(!name.startsWith("GL_"),
+           `getSupportedExtensions should not expose raw GL extension ${name}`);
+    assert.notStrictEqual(
+        gl.getExtension(name), null,
+        `${name} is listed but getExtension returned null`);
+  }
 
   const knownExtensions = [
     "ANGLE_instanced_arrays",
@@ -204,6 +215,34 @@ function testSupportedExtensionsReflectGetExtension(gl) {
   assert(supported.includes("ANGLE_instanced_arrays"));
   assert(supported.includes("OES_vertex_array_object"));
   assert(supported.includes("WEBGL_draw_buffers"));
+  assert.notStrictEqual(gl.getExtension("angle_instanced_arrays"), null);
+  assert.notStrictEqual(gl.getExtension("oes_vertex_array_object"), null);
+  assert.notStrictEqual(gl.getExtension("webgl_draw_buffers"), null);
+  assert.strictEqual(gl.getExtension("NOT_A_WEBGL_EXTENSION"), null);
+  assertNoError(gl, "getExtension browser-compatible names");
+}
+
+function testUnsupportedExtensionDoesNotWriteStderr() {
+  const result = spawnSync(process.execPath, ["-e", `
+    const assert = require("assert");
+    const nodeGles = require(".");
+    const gl = nodeGles.createWebGLRenderingContext({
+      width: 4,
+      height: 4,
+      majorVersion: 3,
+      minorVersion: 0
+    });
+    assert.strictEqual(gl.getExtension("NOT_A_WEBGL_EXTENSION"), null);
+  `], {
+    cwd: path.resolve(__dirname, ".."),
+    encoding: "utf8"
+  });
+  assert.strictEqual(
+      result.status, 0,
+      `unsupported extension child failed\nstdout:\n${result.stdout}\nstderr:\n${result.stderr}`);
+  assert.strictEqual(
+      result.stderr, "",
+      `unsupported extension wrote stderr:\n${result.stderr}`);
 }
 
 function testGetParameterSemantics(gl) {
@@ -260,6 +299,302 @@ function testGetParameterSemantics(gl) {
   assert.strictEqual(gl.getParameter(0xdeadbeef), null);
   assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
   assert.strictEqual(gl.getError(), gl.NO_ERROR);
+}
+
+function testBufferCopyAndReadback(gl) {
+  const source = gl.createBuffer();
+  const destination = gl.createBuffer();
+  gl.bindBuffer(gl.COPY_READ_BUFFER, source);
+  gl.bufferData(
+      gl.COPY_READ_BUFFER, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
+      gl.STATIC_DRAW);
+  gl.bindBuffer(gl.COPY_WRITE_BUFFER, destination);
+  gl.bufferData(gl.COPY_WRITE_BUFFER, 8, gl.DYNAMIC_READ);
+  gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, 2, 1, 4);
+
+  const full = new Uint8Array(8);
+  gl.getBufferSubData(gl.COPY_WRITE_BUFFER, 0, full);
+  assert.deepStrictEqual(Array.from(full), [0, 3, 4, 5, 6, 0, 0, 0]);
+
+  const partial = new Uint8Array([99, 99, 99, 99, 99, 99]);
+  gl.getBufferSubData(gl.COPY_WRITE_BUFFER, 1, partial, 1, 4);
+  assert.deepStrictEqual(Array.from(partial), [99, 3, 4, 5, 6, 99]);
+
+  gl.bindBuffer(gl.COPY_READ_BUFFER, null);
+  gl.bindBuffer(gl.COPY_WRITE_BUFFER, null);
+  gl.deleteBuffer(source);
+  gl.deleteBuffer(destination);
+  assertNoError(gl, "buffer copy and readback");
+}
+
+function testSamplerObjects(gl) {
+  const sampler = gl.createSampler();
+  assert.notStrictEqual(sampler, null);
+  gl.bindSampler(0, sampler);
+  assert.strictEqual(gl.isSampler(sampler), true);
+  assert.strictEqual(gl.getParameter(gl.SAMPLER_BINDING), sampler);
+
+  gl.samplerParameteri(sampler, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.samplerParameteri(sampler, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.samplerParameterf(sampler, gl.TEXTURE_MIN_LOD, -2.5);
+  assert.strictEqual(
+      gl.getSamplerParameter(sampler, gl.TEXTURE_MIN_FILTER), gl.NEAREST);
+  assert.strictEqual(
+      gl.getSamplerParameter(sampler, gl.TEXTURE_MAG_FILTER), gl.LINEAR);
+  assert.strictEqual(
+      gl.getSamplerParameter(sampler, gl.TEXTURE_MIN_LOD), -2.5);
+
+  gl.bindSampler(0, null);
+  gl.deleteSampler(sampler);
+  assertNoError(gl, "sampler objects");
+}
+
+function testSyncObjects(gl) {
+  const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  assert.notStrictEqual(sync, null);
+  assert.strictEqual(gl.isSync(sync), true);
+  assert.strictEqual(
+      gl.getSyncParameter(sync, gl.SYNC_CONDITION),
+      gl.SYNC_GPU_COMMANDS_COMPLETE);
+
+  gl.flush();
+  const waitResult = gl.clientWaitSync(sync, 0, 0);
+  assert([
+    gl.ALREADY_SIGNALED,
+    gl.CONDITION_SATISFIED,
+    gl.TIMEOUT_EXPIRED
+  ].includes(waitResult), `unexpected clientWaitSync result ${waitResult}`);
+
+  const syncStatus = gl.getSyncParameter(sync, gl.SYNC_STATUS);
+  assert([gl.SIGNALED, gl.UNSIGNALED].includes(syncStatus),
+         `unexpected sync status ${syncStatus}`);
+  gl.waitSync(sync, 0, gl.TIMEOUT_IGNORED);
+  gl.deleteSync(sync);
+  assertNoError(gl, "sync objects");
+}
+
+function testTypedArrayTextureUploadOffsets(gl) {
+  const src = new Uint8Array([
+    1, 2, 3, 4,
+    10, 20, 30, 255
+  ]);
+
+  const imageTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, imageTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, src, 4);
+  assertPixelNear(
+      readTexture2DPixel(gl, imageTexture, 0, 0), [10, 20, 30, 255],
+      "texImage2D typed-array srcOffset");
+
+  const subTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, subTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA,
+                   gl.UNSIGNED_BYTE, src, 4);
+  assertPixelNear(
+      readTexture2DPixel(gl, subTexture, 0, 0), [10, 20, 30, 255],
+      "texSubImage2D typed-array srcOffset");
+
+  const imageArrayTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, imageArrayTexture);
+  configureTexture(gl, gl.TEXTURE_2D_ARRAY);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA, 1, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, src, 4);
+  assertPixelNear(
+      readTextureLayerPixel(gl, imageArrayTexture, 0, 0, 0), [10, 20, 30, 255],
+      "texImage3D typed-array srcOffset");
+
+  const subArrayTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, subArrayTexture);
+  configureTexture(gl, gl.TEXTURE_2D_ARRAY);
+  gl.texImage3D(gl.TEXTURE_2D_ARRAY, 0, gl.RGBA, 1, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  gl.texSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, 1, 1, 1, gl.RGBA,
+                   gl.UNSIGNED_BYTE, src, 4);
+  assertPixelNear(
+      readTextureLayerPixel(gl, subArrayTexture, 0, 0, 0), [10, 20, 30, 255],
+      "texSubImage3D typed-array srcOffset");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  gl.viewport(0, 0, 16, 16);
+  gl.clearColor(0.2, 0.4, 0.6, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const pixels = new Uint8Array([9, 9, 9, 9, 9, 9, 9, 9]);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixels, 4);
+  assert.deepStrictEqual(Array.from(pixels.subarray(0, 4)), [9, 9, 9, 9]);
+  assertPixelNear(
+      pixels.subarray(4, 8), [51, 102, 153, 255],
+      "readPixels typed-array dstOffset", 3);
+  assertNoError(gl, "typed-array texture upload offsets");
+}
+
+function testPixelBufferObjectNumericOffsets(gl) {
+  const pboSource = new Uint8Array([
+    1, 2, 3, 4,
+    20, 40, 60, 255
+  ]);
+  const unpackBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, unpackBuffer);
+  gl.bufferData(gl.PIXEL_UNPACK_BUFFER, pboSource, gl.STATIC_DRAW);
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, 4);
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, null);
+  assertPixelNear(
+      readTexture2DPixel(gl, texture, 0, 0), [20, 40, 60, 255],
+      "texImage2D PBO numeric offset");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, 16, 16);
+  gl.clearColor(0.25, 0.5, 0.75, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const packBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, packBuffer);
+  gl.bufferData(gl.PIXEL_PACK_BUFFER, new Uint8Array(8), gl.STREAM_READ);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, 4);
+  const packed = new Uint8Array(8);
+  gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, packed);
+  assert.deepStrictEqual(Array.from(packed.subarray(0, 4)), [0, 0, 0, 0]);
+  assertPixelNear(
+      packed.subarray(4, 8), [64, 128, 191, 255],
+      "readPixels PBO numeric offset", 3);
+
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+  gl.deleteBuffer(unpackBuffer);
+  gl.deleteBuffer(packBuffer);
+  gl.deleteTexture(texture);
+  assertNoError(gl, "pixel buffer object numeric offsets");
+}
+
+function testMultisampleFramebufferOperations(gl) {
+  const maxSamples = gl.getParameter(gl.MAX_SAMPLES);
+  assert(maxSamples > 0, "MAX_SAMPLES should be positive");
+  const samples = Math.min(4, maxSamples);
+
+  const multisampleRenderbuffer = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, multisampleRenderbuffer);
+  gl.renderbufferStorageMultisample(
+      gl.RENDERBUFFER, samples, gl.RGBA8, 4, 4);
+  const multisampleFramebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, multisampleFramebuffer);
+  gl.framebufferRenderbuffer(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER,
+      multisampleRenderbuffer);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  gl.viewport(0, 0, 4, 4);
+  gl.clearColor(0, 0, 1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+
+  const resolveTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, resolveTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  const resolveFramebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, resolveFramebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, resolveTexture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+
+  gl.bindFramebuffer(gl.READ_FRAMEBUFFER, multisampleFramebuffer);
+  gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, resolveFramebuffer);
+  gl.blitFramebuffer(
+      0, 0, 4, 4, 0, 0, 4, 4, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, resolveFramebuffer);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  assertPixelNear(pixel, [0, 0, 255, 255], "multisample blit");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(multisampleFramebuffer);
+  gl.deleteFramebuffer(resolveFramebuffer);
+  gl.deleteRenderbuffer(multisampleRenderbuffer);
+  gl.deleteTexture(resolveTexture);
+  assertNoError(gl, "multisample framebuffer operations");
+}
+
+function testUnsignedIntegerUniforms(gl) {
+  const program = createProgramFromSources(gl, `#version 300 es
+void main() {
+  vec2 positions[3] = vec2[3](
+      vec2(-1.0, -1.0),
+      vec2(3.0, -1.0),
+      vec2(-1.0, 3.0));
+  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+uniform uint u_scalar;
+uniform uvec4 u_vector;
+out vec4 out_color;
+void main() {
+  bool ok = u_scalar == 7u && all(equal(u_vector, uvec4(1u, 2u, 3u, 4u)));
+  out_color = ok ? vec4(0.0, 1.0, 0.0, 1.0) :
+                   vec4(1.0, 0.0, 0.0, 1.0);
+}
+`);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, 16, 16);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(program);
+  gl.uniform1ui(gl.getUniformLocation(program, "u_scalar"), 7);
+  gl.uniform4uiv(
+      gl.getUniformLocation(program, "u_vector"),
+      new Uint32Array([1, 2, 3, 4]));
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  assertPixelNear(pixel, [0, 255, 0, 255], "unsigned integer uniforms");
+  assertNoError(gl, "unsigned integer uniforms");
+}
+
+function testNonSquareUniformMatrices(gl) {
+  const program = createProgramFromSources(gl, `#version 300 es
+void main() {
+  vec2 positions[3] = vec2[3](
+      vec2(-1.0, -1.0),
+      vec2(3.0, -1.0),
+      vec2(-1.0, 3.0));
+  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+uniform mat2x3 u_m23;
+uniform mat4x2 u_m42;
+out vec4 out_color;
+void main() {
+  float value = u_m23[0][0] + u_m23[1][2] + u_m42[3][1];
+  out_color = abs(value - 9.0) < 0.01 ? vec4(0.0, 1.0, 0.0, 1.0) :
+                                        vec4(1.0, 0.0, 0.0, 1.0);
+}
+`);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, 16, 16);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(program);
+  gl.uniformMatrix2x3fv(
+      gl.getUniformLocation(program, "u_m23"), false,
+      new Float32Array([1, 0, 0, 0, 0, 3]));
+  gl.uniformMatrix4x2fv(
+      gl.getUniformLocation(program, "u_m42"), false,
+      new Float32Array([0, 0, 0, 0, 0, 0, 0, 5]));
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  assertPixelNear(pixel, [0, 255, 0, 255], "non-square uniform matrices");
+  assertNoError(gl, "non-square uniform matrices");
 }
 
 function testDestroyApi() {
@@ -841,7 +1176,54 @@ function testVertexArrayState(gl) {
   assertNoError(gl, "VAO state smoke");
 }
 
-function testInstancedDrawing(gl, indexed) {
+function testExtensionAliasCalls(gl) {
+  const vaoExt = gl.getExtension("OES_VERTEX_ARRAY_OBJECT");
+  assert.notStrictEqual(vaoExt, null, "OES_vertex_array_object alias missing");
+  assert.strictEqual(typeof vaoExt.createVertexArrayOES, "function");
+  assert.strictEqual(typeof vaoExt.bindVertexArrayOES, "function");
+  assert.strictEqual(typeof vaoExt.deleteVertexArrayOES, "function");
+  assert.strictEqual(typeof vaoExt.isVertexArrayOES, "function");
+  const vao = vaoExt.createVertexArrayOES();
+  vaoExt.bindVertexArrayOES(vao);
+  assert.strictEqual(vaoExt.isVertexArrayOES(vao), true);
+  assert.strictEqual(gl.getParameter(vaoExt.VERTEX_ARRAY_BINDING_OES), vao);
+  vaoExt.bindVertexArrayOES(null);
+  vaoExt.deleteVertexArrayOES(vao);
+  assertNoError(gl, "OES_vertex_array_object alias calls");
+
+  const drawBuffersExt = gl.getExtension("WEBGL_DRAW_BUFFERS");
+  assert.notStrictEqual(drawBuffersExt, null, "WEBGL_draw_buffers alias missing");
+  assert.strictEqual(typeof drawBuffersExt.drawBuffersWEBGL, "function");
+  assert.strictEqual(drawBuffersExt.COLOR_ATTACHMENT0_WEBGL,
+                     gl.COLOR_ATTACHMENT0);
+  assert.strictEqual(drawBuffersExt.DRAW_BUFFER0_WEBGL, gl.DRAW_BUFFER0);
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+                gl.UNSIGNED_BYTE, null);
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  drawBuffersExt.drawBuffersWEBGL([drawBuffersExt.COLOR_ATTACHMENT0_WEBGL]);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(framebuffer);
+  gl.deleteTexture(texture);
+  assertNoError(gl, "WEBGL_draw_buffers alias calls");
+
+  const instancedExt = gl.getExtension("ANGLE_INSTANCED_ARRAYS");
+  assert.notStrictEqual(instancedExt, null, "ANGLE_instanced_arrays alias missing");
+  assert.strictEqual(typeof instancedExt.drawArraysInstancedANGLE, "function");
+  assert.strictEqual(typeof instancedExt.drawElementsInstancedANGLE, "function");
+  assert.strictEqual(typeof instancedExt.vertexAttribDivisorANGLE, "function");
+  testInstancedDrawing(gl, false, instancedExt);
+  testInstancedDrawing(gl, true, instancedExt);
+}
+
+function testInstancedDrawing(gl, indexed, instancedExt = null) {
   const program = createProgram(gl);
   gl.useProgram(program);
   gl.viewport(0, 0, 16, 16);
@@ -870,24 +1252,37 @@ function testInstancedDrawing(gl, indexed) {
       gl.STATIC_DRAW);
   gl.vertexAttribPointer(offsetLocation, 2, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(offsetLocation);
-  gl.vertexAttribDivisor(offsetLocation, 1);
+  if (instancedExt) {
+    instancedExt.vertexAttribDivisorANGLE(offsetLocation, 1);
+  } else {
+    gl.vertexAttribDivisor(offsetLocation, 1);
+  }
 
   if (indexed) {
     const elementBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, elementBuffer);
     gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0]),
                   gl.STATIC_DRAW);
-    gl.drawElementsInstanced(gl.POINTS, 1, gl.UNSIGNED_SHORT, 0, 2);
+    if (instancedExt) {
+      instancedExt.drawElementsInstancedANGLE(
+          gl.POINTS, 1, gl.UNSIGNED_SHORT, 0, 2);
+    } else {
+      gl.drawElementsInstanced(gl.POINTS, 1, gl.UNSIGNED_SHORT, 0, 2);
+    }
   } else {
-    gl.drawArraysInstanced(gl.POINTS, 0, 1, 2);
+    if (instancedExt) {
+      instancedExt.drawArraysInstancedANGLE(gl.POINTS, 0, 1, 2);
+    } else {
+      gl.drawArraysInstanced(gl.POINTS, 0, 1, 2);
+    }
   }
 
-  assertRedPixel(gl, 4, 4, indexed ? "drawElementsInstanced A" :
-                                     "drawArraysInstanced A");
-  assertRedPixel(gl, 12, 12, indexed ? "drawElementsInstanced B" :
-                                      "drawArraysInstanced B");
-  assertNoError(gl, indexed ? "drawElementsInstanced" :
-                              "drawArraysInstanced");
+  const label = instancedExt ? "ANGLE_instanced_arrays alias" :
+                               "WebGL2 instanced";
+  assertRedPixel(gl, 4, 4, `${label} A`);
+  assertRedPixel(gl, 12, 12, `${label} B`);
+  assertNoError(gl, indexed ? `${label} drawElements` :
+                              `${label} drawArrays`);
 }
 
 function testWebGL2PixelStoreIsGatedForES2() {
@@ -928,8 +1323,18 @@ const gl = createContext();
 console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
 testSupportedExtensionsReflectGetExtension(gl);
+testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
 testGetParameterSemantics(gl);
+testBufferCopyAndReadback(gl);
+testSamplerObjects(gl);
+testSyncObjects(gl);
+testTypedArrayTextureUploadOffsets(gl);
+testPixelBufferObjectNumericOffsets(gl);
+testMultisampleFramebufferOperations(gl);
+testUnsignedIntegerUniforms(gl);
+testNonSquareUniformMatrices(gl);
+testExtensionAliasCalls(gl);
 testWebGLOnlyPixelStore(gl);
 testWebGLUnpackTransforms(gl);
 testDeleteNullNoOps(gl);
