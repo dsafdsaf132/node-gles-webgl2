@@ -1,6 +1,6 @@
 {
   "name": "node-gles-webgl2",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Headless WebGL2 / OpenGL ES 3 runtime for Node.js backed by ANGLE",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
