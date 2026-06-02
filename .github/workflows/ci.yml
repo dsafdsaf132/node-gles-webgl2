@@ -8,7 +8,24 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    env:
+      GITHUB_TOKEN: ${{ github.token }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-latest
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+          - name: macos-arm64
+            runner: macos-15
+          - name: windows-x64
+            runner: windows-latest
+          - name: windows-arm64
+            runner: windows-11-arm
 
     steps:
       - name: Check out
@@ -20,7 +37,8 @@ jobs:
           node-version: 20
 
       - name: Install native build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libx11-dev xvfb
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3 libx11-dev libxext-dev xvfb
 
       - name: Install dependencies
         run: npm install --ignore-scripts
@@ -28,8 +46,20 @@ jobs:
       - name: Download ANGLE and build addon
         run: node scripts/install.js
 
+      - name: Stage ANGLE DLLs for Windows smoke tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nodeDir = Split-Path -Parent (Get-Command node).Source
+          Copy-Item deps\angle\out\Release\*.dll -Destination $nodeDir -Force
+
       - name: Build TypeScript
         run: npm run build
 
-      - name: Smoke test WebGL2 bindings
+      - name: Smoke test WebGL2 bindings on Linux
+        if: runner.os == 'Linux'
         run: xvfb-run -a npm test
+
+      - name: Smoke test WebGL2 bindings
+        if: runner.os != 'Linux'
+        run: npm test

@@ -56,7 +56,7 @@
       ],
       [
         'OS=="win"', {
-          'defines': ['COMPILER_MSVC'],
+          'defines': ['COMPILER_MSVC', 'NOMINMAX'],
           'libraries': ['libGLESv2', 'libEGL'],
           'library_dirs' : ['<(angle_lib_dir)'],
         },

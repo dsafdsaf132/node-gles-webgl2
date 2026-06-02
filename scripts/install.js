@@ -38,16 +38,25 @@ const copyFile = util.promisify(fs.copyFile);
 const readFile = util.promisify(fs.readFile);
 const writeFile = util.promisify(fs.writeFile);
 
-// Determine which tarball to download based on the OS platform and arch:
+// Determine which archive to download based on the OS platform and arch:
 const platform = os.platform().toLowerCase();
-const platformArch = `${platform}-${os.arch().toLowerCase()}`;
-const ANGLE_VERSION = process.env.NODE_GLES_ANGLE_VERSION || '3729';
-const configuredAngleBaseUri =
-    process.env.NODE_GLES_ANGLE_BASE_URI ||
-    'https://storage.googleapis.com/angle-builds/';
-const ANGLE_BINARY_BASE_URI = configuredAngleBaseUri.endsWith('/') ?
-    configuredAngleBaseUri :
-    `${configuredAngleBaseUri}/`;
+const arch = os.arch().toLowerCase();
+if (arch !== 'x64' && arch !== 'arm64') {
+  throw new Error(`The architecture ${arch} is not currently supported!`);
+}
+const platformArch = `${platform}-${arch}`;
+if (platformArch === 'darwin-x64') {
+  throw new Error('The platform darwin-x64 is not currently supported!');
+}
+const ANGLE_RELEASE_REPOSITORY =
+    process.env.NODE_GLES_ANGLE_RELEASE_REPOSITORY ||
+    'dsafdsaf132/angle-prebuilt';
+const ANGLE_RELEASE_TAG =
+    process.env.NODE_GLES_ANGLE_RELEASE_TAG || 'latest';
+const ANGLE_LEGACY_VERSION = process.env.NODE_GLES_ANGLE_VERSION || '3729';
+const useLegacyAngleUri =
+    Boolean(process.env.NODE_GLES_ANGLE_VERSION ||
+        process.env.NODE_GLES_ANGLE_BASE_URI);
 let archiveExtension;
 if (platform === 'darwin') {
   archiveExtension = 'tar.gz';
@@ -59,10 +68,6 @@ if (platform === 'darwin') {
   console.log('platform: ' + platform);
   throw new Error(`The platform ${platformArch} is not currently supported!`);
 }
-const ANGLE_ARCHIVE_NAME =
-    `angle-${ANGLE_VERSION}-${platformArch}.${archiveExtension}`;
-const ANGLE_BINARY_URI = new URL(
-    ANGLE_ARCHIVE_NAME, ANGLE_BINARY_BASE_URI).toString();
 const LEGACY_ANGLE_CACHE_ENV = 'NODE_GLES_ALLOW_LEGACY_ANGLE_CACHE';
 
 // Dependency storage paths:
@@ -156,6 +161,13 @@ async function copyRequiredWindowsDlls() {
     }
     await copyFile(source, path.join(buildReleasePath, dllName));
   }
+  const optionalRuntimeDlls = ['d3dcompiler_47.dll'];
+  for (const dllName of optionalRuntimeDlls) {
+    const source = path.join(angleReleasePath, dllName);
+    if (await exists(source)) {
+      await copyFile(source, path.join(buildReleasePath, dllName));
+    }
+  }
 }
 
 async function hasRequiredAngleFiles(angleDirPath) {
@@ -203,12 +215,16 @@ async function readAngleMetadata() {
   }
 }
 
-async function writeAngleMetadata() {
+async function writeAngleMetadata(angleArchive) {
   const metadata = {
-    version: ANGLE_VERSION,
-    platformArch,
-    archiveName: ANGLE_ARCHIVE_NAME,
-    archiveUri: ANGLE_BINARY_URI,
+    provider: angleArchive.provider,
+    version: angleArchive.version,
+    releaseRepository: angleArchive.releaseRepository || null,
+    releaseTag: angleArchive.releaseTag || null,
+    requestedReleaseTag: angleArchive.requestedReleaseTag || null,
+    platformArch: angleArchive.platformArch,
+    archiveName: angleArchive.archiveName,
+    archiveUri: angleArchive.archiveUri,
     sha256: process.env.NODE_GLES_ANGLE_SHA256 || null
   };
   await writeFile(angleMetadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
@@ -217,20 +233,28 @@ async function writeAngleMetadata() {
 function hasAngleOverrideEnv() {
   return Boolean(process.env.NODE_GLES_ANGLE_VERSION ||
       process.env.NODE_GLES_ANGLE_BASE_URI ||
+      process.env.NODE_GLES_ANGLE_RELEASE_REPOSITORY ||
+      process.env.NODE_GLES_ANGLE_RELEASE_TAG ||
       process.env.NODE_GLES_ANGLE_SHA256);
 }
 
-async function getReusableAngleFilesMessage() {
+async function getReusableAngleFilesMessage(angleArchive) {
   if (!await hasRequiredAngleFiles()) {
     return null;
   }
 
   const metadata = await readAngleMetadata();
   if (metadata !== null) {
-    if (metadata.version === ANGLE_VERSION &&
-        metadata.platformArch === platformArch &&
-        metadata.archiveName === ANGLE_ARCHIVE_NAME &&
-        metadata.archiveUri === ANGLE_BINARY_URI &&
+    if (metadata.provider === angleArchive.provider &&
+        metadata.version === angleArchive.version &&
+        metadata.releaseRepository ===
+            (angleArchive.releaseRepository || null) &&
+        metadata.releaseTag === (angleArchive.releaseTag || null) &&
+        metadata.requestedReleaseTag ===
+            (angleArchive.requestedReleaseTag || null) &&
+        metadata.platformArch === angleArchive.platformArch &&
+        metadata.archiveName === angleArchive.archiveName &&
+        metadata.archiveUri === angleArchive.archiveUri &&
         metadata.sha256 === (process.env.NODE_GLES_ANGLE_SHA256 || null)) {
       return `* Reusing ANGLE from ${angleReleasePath}`;
     }
@@ -277,25 +301,143 @@ function assertSafeZipEntries(zipFile) {
   }
 }
 
-function createHttpsOptions(uri) {
+function createHttpsOptions(uri, extraHeaders) {
   // If HTTPS_PROXY, https_proxy, HTTP_PROXY, or http_proxy is set
   const proxy = process.env['HTTPS_PROXY'] || process.env['https_proxy'] ||
       process.env['HTTP_PROXY'] || process.env['http_proxy'] || '';
 
   const angleUri = new URL(uri);
+  const headers = Object.assign(
+      {'Cache-Control': 'no-cache'}, extraHeaders || {});
+  if (angleUri.hostname === 'api.github.com') {
+    headers['User-Agent'] = 'node-gles-webgl2-installer';
+    headers['Accept'] = 'application/vnd.github+json';
+    const githubToken = process.env.NODE_GLES_GITHUB_TOKEN ||
+        process.env.GITHUB_TOKEN;
+    if (githubToken) {
+      headers['Authorization'] = `Bearer ${githubToken}`;
+    }
+  }
   const options = {
     protocol: angleUri.protocol,
     hostname: angleUri.hostname,
     port: angleUri.port,
     path: `${angleUri.pathname}${angleUri.search}`,
     agent: https.globalAgent,
-    headers: {'Cache-Control': 'no-cache'}
+    headers
   };
 
   if (proxy !== '') {
     options.agent = new HttpsProxyAgent(proxy);
   }
   return options;
+}
+
+function requestJson(uri, redirectsRemaining = 5) {
+  return new Promise((resolve, reject) => {
+    const request = https.get(createHttpsOptions(uri), response => {
+      if (response.statusCode >= 300 && response.statusCode < 400 &&
+          response.headers.location) {
+        response.resume();
+        if (redirectsRemaining <= 0) {
+          reject(new Error(`Too many redirects: ${uri}`));
+          return;
+        }
+        const redirectedUri =
+            new URL(response.headers.location, uri).toString();
+        requestJson(redirectedUri, redirectsRemaining - 1)
+            .then(resolve, reject);
+        return;
+      }
+
+      let body = '';
+      response.setEncoding('utf8');
+      response.on('data', chunk => body += chunk);
+      response.on('end', () => {
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          reject(new Error(
+              `Failed to query ANGLE release: HTTP ` +
+              `${response.statusCode} ${uri}\n${body}`));
+          return;
+        }
+        try {
+          resolve(JSON.parse(body));
+        } catch (err) {
+          reject(err);
+        }
+      });
+      response.on('error', reject);
+    });
+
+    request.on('error', reject);
+    request.setTimeout(60000, () => {
+      request.destroy(new Error(`Timed out querying ANGLE release from ${uri}`));
+    });
+  });
+}
+
+function createLegacyAngleArchive() {
+  const configuredAngleBaseUri =
+      process.env.NODE_GLES_ANGLE_BASE_URI ||
+      'https://storage.googleapis.com/angle-builds/';
+  const angleBinaryBaseUri = configuredAngleBaseUri.endsWith('/') ?
+      configuredAngleBaseUri :
+      `${configuredAngleBaseUri}/`;
+  const archiveName =
+      `angle-${ANGLE_LEGACY_VERSION}-${platformArch}.${archiveExtension}`;
+  return {
+    provider: 'archive-uri',
+    version: ANGLE_LEGACY_VERSION,
+    releaseRepository: null,
+    releaseTag: null,
+    requestedReleaseTag: null,
+    platformArch,
+    archiveName,
+    archiveUri: new URL(archiveName, angleBinaryBaseUri).toString()
+  };
+}
+
+async function resolveGitHubAngleArchive() {
+  const releasePath = ANGLE_RELEASE_TAG === 'latest' ?
+      'latest' :
+      `tags/${encodeURIComponent(ANGLE_RELEASE_TAG)}`;
+  const releaseUri =
+      `https://api.github.com/repos/${ANGLE_RELEASE_REPOSITORY}/releases/` +
+      releasePath;
+  const release = await requestJson(releaseUri);
+  const releaseTag = release.tag_name;
+  const expectedArchiveName =
+      `angle-${releaseTag}-${platformArch}.${archiveExtension}`;
+  const expectedArchiveSuffix =
+      `-${platformArch}.${archiveExtension}`;
+  const assets = Array.isArray(release.assets) ? release.assets : [];
+  const asset = assets.find(item => item.name === expectedArchiveName) ||
+      assets.find(item => item.name && item.name.endsWith(expectedArchiveSuffix));
+  if (!asset) {
+    const availableAssets = assets.map(item => item.name).join(', ') || '(none)';
+    throw new Error(
+        `ANGLE release ${releaseTag} does not provide an archive for ` +
+        `${platformArch}. Expected ${expectedArchiveName}. ` +
+        `Available assets: ${availableAssets}`);
+  }
+  const archiveUri = asset.browser_download_url || asset.url;
+  return {
+    provider: 'github-release',
+    version: releaseTag,
+    releaseRepository: ANGLE_RELEASE_REPOSITORY,
+    releaseTag,
+    requestedReleaseTag: ANGLE_RELEASE_TAG,
+    platformArch,
+    archiveName: asset.name,
+    archiveUri
+  };
+}
+
+async function resolveAngleArchive() {
+  if (useLegacyAngleUri) {
+    return createLegacyAngleArchive();
+  }
+  return resolveGitHubAngleArchive();
 }
 
 function downloadFile(uri, tempFileName, redirectsRemaining = 5) {
@@ -395,16 +537,20 @@ async function verifyArchiveChecksum(tempFileName) {
 }
 
 //
-// Downloads and extracts the ANGLE archive set at `ANGLE_BINARY_URI`.
+// Downloads and extracts the selected ANGLE archive.
 //
 async function downloadAngleLibs() {
-  const reusableAngleFilesMessage = await getReusableAngleFilesMessage();
+  const angleArchive = await resolveAngleArchive();
+  const reusableAngleFilesMessage =
+      await getReusableAngleFilesMessage(angleArchive);
   if (reusableAngleFilesMessage !== null) {
     console.error(reusableAngleFilesMessage);
     return;
   }
 
-  console.error(`* Downloading ANGLE ${ANGLE_VERSION} for ${platformArch}`);
+  console.error(
+      `* Downloading ANGLE ${angleArchive.version} for ` +
+      `${angleArchive.platformArch}`);
   await ensureDir(depsPath);
 
   const tempFileName =
@@ -416,7 +562,7 @@ async function downloadAngleLibs() {
   try {
     await removePathIfExists(stagingDepsPath);
     await mkdir(stagingDepsPath);
-    await downloadFileWithRetries(ANGLE_BINARY_URI, tempFileName);
+    await downloadFileWithRetries(angleArchive.archiveUri, tempFileName);
     await verifyArchiveChecksum(tempFileName);
     if (platform === 'win32') {
       const zipFile = new zip(tempFileName);
@@ -444,7 +590,7 @@ async function downloadAngleLibs() {
     }
     await removePathIfExists(anglePath);
     await rename(stagingAnglePath, anglePath);
-    await writeAngleMetadata();
+    await writeAngleMetadata(angleArchive);
   } finally {
     await unlinkIfExists(tempFileName);
     await removePathIfExists(stagingDepsPath);
