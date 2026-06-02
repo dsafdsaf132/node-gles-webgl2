@@ -151,7 +151,7 @@ jobs:
           git clone https://chromium.googlesource.com/angle/angle "$RUNNER_TEMP_UNIX/angle"
           cd "$RUNNER_TEMP_UNIX/angle"
           git checkout "$ANGLE_REF"
-          python scripts/bootstrap.py
+          vpython scripts/bootstrap.py
           gclient sync --no-history --shallow --jobs 8
 
       - name: Generate ANGLE build files
