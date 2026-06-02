@@ -145,35 +145,62 @@ EGLContextWrapper::EGLContextWrapper(napi_env env,
 
 bool EGLContextWrapper::InitEGL(napi_env env,
                                 const GLContextOptions& context_options) {
-  std::vector<EGLAttrib> display_attributes;
-  display_attributes.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
+  EGLint major = 0;
+  EGLint minor = 0;
+  bool had_display = false;
+
+  std::vector<EGLAttrib> platform_types;
+#if defined(__APPLE__) && defined(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE)
+  platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE);
+#endif
+  platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_DEFAULT_ANGLE);
+#if defined(__arm__) && defined(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE)
   // Most NVIDIA drivers will not work properly with
   // EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE, only enable this option on ARM
   // devices for now:
-#if defined(__arm__)
-  display_attributes.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
-#else
-  display_attributes.push_back(EGL_PLATFORM_ANGLE_TYPE_DEFAULT_ANGLE);
+  platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
+#endif
+#if defined(__APPLE__) && defined(EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE)
+  platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE);
 #endif
 
-  display_attributes.push_back(EGL_NONE);
+  for (EGLAttrib platform_type : platform_types) {
+    std::vector<EGLAttrib> display_attributes;
+    display_attributes.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
+    display_attributes.push_back(platform_type);
+    display_attributes.push_back(EGL_NONE);
 
-  display = eglGetPlatformDisplay(EGL_PLATFORM_ANGLE_ANGLE, nullptr,
-                                  &display_attributes[0]);
+    EGLDisplay candidate = eglGetPlatformDisplay(
+        EGL_PLATFORM_ANGLE_ANGLE, nullptr, display_attributes.data());
+    if (candidate == EGL_NO_DISPLAY) {
+      eglGetError();
+      continue;
+    }
+    had_display = true;
+    if (eglInitialize(candidate, &major, &minor)) {
+      display = candidate;
+      break;
+    }
+    eglGetError();
+  }
+
   if (display == EGL_NO_DISPLAY) {
     // TODO(kreeger): This is the default path for Mac OS. Determine why egl has
     // to be initialized this way on Mac OS.
-    display = eglGetDisplay(EGL_DEFAULT_DISPLAY);
-    if (display == EGL_NO_DISPLAY) {
-      NAPI_THROW_ERROR(env, "No display");
-      return false;
+    EGLDisplay candidate = eglGetDisplay(EGL_DEFAULT_DISPLAY);
+    if (candidate != EGL_NO_DISPLAY) {
+      had_display = true;
+      if (eglInitialize(candidate, &major, &minor)) {
+        display = candidate;
+      } else {
+        eglGetError();
+      }
     }
   }
 
-  EGLint major;
-  EGLint minor;
-  if (!eglInitialize(display, &major, &minor)) {
-    NAPI_THROW_ERROR(env, "Could not initialize display");
+  if (display == EGL_NO_DISPLAY) {
+    NAPI_THROW_ERROR(
+        env, had_display ? "Could not initialize display" : "No display");
     return false;
   }
   RetainEGLDisplay(display);
