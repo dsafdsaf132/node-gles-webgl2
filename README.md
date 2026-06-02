@@ -88,6 +88,10 @@ Installer overrides:
 - `NODE_GLES_ANGLE_BASE_URI`: archive base URL
 - `NODE_GLES_ANGLE_SHA256`: optional archive checksum verification
 
+ARM64 ANGLE archives are built by the manual `Build ANGLE ARM64` workflow and
+uploaded as GitHub Release assets. The experimental ARM64 CI workflow uses those
+release assets by default.
+
 On Linux, the native build needs X11 development headers. On Ubuntu:
 
 ```sh
@@ -96,11 +100,14 @@ sudo apt-get install -y build-essential python3 libx11-dev
 
 ## Platform Support
 
-| Platform    | Status                                                                                                                    |
-| ----------- | ------------------------------------------------------------------------------------------------------------------------- |
-| Linux x64   | CI-tested. Requires X11 development headers for native builds.                                                            |
-| macOS x64   | Installer path exists, but CI does not currently cover it.                                                                |
-| Windows x64 | Installer path exists and copies ANGLE runtime DLLs next to the native addon after build. CI does not currently cover it. |
+| Platform      | Status                                                                                               |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| Linux x64     | CI-tested. Requires X11 development headers for native builds.                                       |
+| macOS x64     | CI-tested with the default ANGLE archive.                                                            |
+| Windows x64   | CI-tested with the default ANGLE archive and copied ANGLE runtime DLLs.                              |
+| Linux arm64   | Experimental manual CI target. Requires a matching ANGLE archive.                                    |
+| macOS arm64   | Experimental manual CI target. Requires a matching ANGLE archive.                                    |
+| Windows arm64 | Experimental manual CI target. Requires a matching ANGLE archive and Windows ARM64 GitHub runner use. |
 
 ## License
 

@@ -7,8 +7,19 @@ on:
       - main
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-x64:
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-x64
+            runner: ubuntu-latest
+          - name: macos-x64
+            runner: macos-15-intel
+          - name: windows-x64
+            runner: windows-latest
 
     steps:
       - name: Check out
@@ -20,6 +31,7 @@ jobs:
           node-version: 20
 
       - name: Install native build dependencies
+        if: runner.os == 'Linux'
         run: sudo apt-get update && sudo apt-get install -y libx11-dev xvfb
 
       - name: Install dependencies
@@ -31,5 +43,10 @@ jobs:
       - name: Build TypeScript
         run: npm run build
 
-      - name: Smoke test WebGL2 bindings
+      - name: Smoke test WebGL2 bindings on Linux
+        if: runner.os == 'Linux'
         run: xvfb-run -a npm test
+
+      - name: Smoke test WebGL2 bindings
+        if: runner.os != 'Linux'
+        run: npm test

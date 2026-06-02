@@ -1,0 +1,67 @@
+name: Experimental ARM64 CI
+
+on:
+  workflow_dispatch:
+    inputs:
+      angle_version:
+        description: "ANGLE binary version to test"
+        required: true
+        default: "3729"
+        type: string
+      angle_base_uri:
+        description: "ANGLE archive base URL"
+        required: true
+        default: "https://github.com/dsafdsaf132/node-gles-webgl2/releases/download/angle-arm64-3729/"
+        type: string
+
+jobs:
+  # ARM64 hosted runners are available, but the default ANGLE archive set may
+  # not include every arm64 platform. Keep this manual and non-blocking until
+  # matching archives are published.
+  build-arm64:
+    name: Build and test (${{ matrix.name }})
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: linux-arm64
+            runner: ubuntu-24.04-arm
+          - name: macos-arm64
+            runner: macos-15
+          - name: windows-arm64
+            runner: windows-11-arm
+    env:
+      NODE_GLES_ANGLE_VERSION: ${{ inputs.angle_version }}
+      NODE_GLES_ANGLE_BASE_URI: ${{ inputs.angle_base_uri }}
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install native build dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev xvfb
+
+      - name: Install dependencies
+        run: npm install --ignore-scripts
+
+      - name: Download ANGLE and build addon
+        run: node scripts/install.js
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Smoke test WebGL2 bindings on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm test
+
+      - name: Smoke test WebGL2 bindings
+        if: runner.os != 'Linux'
+        run: npm test
