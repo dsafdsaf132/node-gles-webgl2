@@ -102,15 +102,14 @@ sudo apt-get install -y build-essential python3 libx11-dev libxext-dev
 
 ## Platform Support
 
-| Platform      | Status                                                                                               |
-| ------------- | ---------------------------------------------------------------------------------------------------- |
-| Linux x64     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
-| Linux arm64   | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
-| macOS arm64   | CI-tested with the default ANGLE prebuilt archive.                                                    |
-| Windows x64   | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
-| Windows arm64 | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
-
-macOS x64 is not supported by the default ANGLE prebuilt archive set.
+| Platform      | Status | Notes                                                                                                |
+| ------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| Linux x64     | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
+| Linux arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
+| macOS arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive.                                                    |
+| macOS x64     | ❌     | Not supported by the default ANGLE prebuilt archive set.                                              |
+| Windows x64   | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
+| Windows arm64 | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
 
 ## License
 
