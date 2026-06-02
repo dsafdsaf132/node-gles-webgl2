@@ -78,36 +78,38 @@ node scripts/install.js
 npm run build
 ```
 
-`scripts/install.js` downloads the ANGLE binary package into `deps/angle` and
-builds the native addon with `node-gyp`. If a complete ANGLE `out/Release`
-directory is already present, the installer reuses it.
+`scripts/install.js` downloads the latest matching ANGLE prebuilt archive from
+[`dsafdsaf132/angle-prebuilt`](https://github.com/dsafdsaf132/angle-prebuilt)
+into `deps/angle` and builds the native addon with `node-gyp`. If a complete
+ANGLE `out/Release` directory is already present and matches the selected
+release, the installer reuses it.
 
 Installer overrides:
 
-- `NODE_GLES_ANGLE_VERSION`: ANGLE binary version, default `3729`
-- `NODE_GLES_ANGLE_BASE_URI`: archive base URL
+- `NODE_GLES_ANGLE_RELEASE_REPOSITORY`: GitHub release repository, default
+  `dsafdsaf132/angle-prebuilt`
+- `NODE_GLES_ANGLE_RELEASE_TAG`: GitHub release tag, default `latest`
+- `NODE_GLES_ANGLE_VERSION` and `NODE_GLES_ANGLE_BASE_URI`: legacy explicit
+  archive URL mode
 - `NODE_GLES_ANGLE_SHA256`: optional archive checksum verification
-
-ARM64 CI builds ANGLE from source on ARM64 runners before building the native
-addon. The manual `Build ANGLE ARM64` workflow can still publish reusable ANGLE
-archives as GitHub Release assets.
+- `NODE_GLES_GITHUB_TOKEN`: optional GitHub API token for release lookups
 
 On Linux, the native build needs X11 development headers. On Ubuntu:
 
 ```sh
-sudo apt-get install -y build-essential python3 libx11-dev
+sudo apt-get install -y build-essential python3 libx11-dev libxext-dev
 ```
 
 ## Platform Support
 
 | Platform      | Status                                                                                               |
 | ------------- | ---------------------------------------------------------------------------------------------------- |
-| Linux x64     | CI-tested. Requires X11 development headers for native builds.                                       |
-| macOS x64     | CI-tested with the default ANGLE archive.                                                            |
-| Windows x64   | CI-tested with the default ANGLE archive and copied ANGLE runtime DLLs.                              |
-| Linux arm64   | Experimental CI target. Builds ANGLE from source on an ARM64 runner.                                 |
-| macOS arm64   | Experimental CI target. Builds ANGLE from source on an ARM64 runner.                                 |
-| Windows arm64 | Experimental CI target. Builds ANGLE from source on a Windows ARM64 runner.                          |
+| Linux x64     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
+| Linux arm64   | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
+| macOS x64     | CI-tested with the default ANGLE prebuilt archive.                                                    |
+| macOS arm64   | CI-tested with the default ANGLE prebuilt archive.                                                    |
+| Windows x64   | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
+| Windows arm64 | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
 
 ## License
 
