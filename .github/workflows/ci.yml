@@ -40,6 +40,13 @@ jobs:
       - name: Download ANGLE and build addon
         run: node scripts/install.js
 
+      - name: Stage ANGLE DLLs for Windows smoke tests
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $nodeDir = Split-Path -Parent (Get-Command node).Source
+          Copy-Item deps\angle\out\Release\*.dll -Destination $nodeDir -Force
+
       - name: Build TypeScript
         run: npm run build
 
