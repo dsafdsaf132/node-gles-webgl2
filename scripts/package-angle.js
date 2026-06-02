@@ -9,7 +9,8 @@ const AdmZip = require('adm-zip');
 function usage() {
   console.error(
       'Usage: node scripts/package-angle.js --source <angle-dir> ' +
-      '--version <archive-version> --out-dir <output-dir>');
+      '--version <archive-version> --out-dir <output-dir> ' +
+      '[--install-dir <deps/angle-dir>]');
 }
 
 function parseArgs(argv) {
@@ -76,7 +77,7 @@ function resolveRequiredFile(releasePath, fileSpec) {
     for (const fileName of fileSpec) {
       const filePath = path.join(releasePath, fileName);
       if (fs.existsSync(filePath)) {
-        return fileName;
+        return {sourceName: fileName, outputName: fileSpec[0]};
       }
     }
     throw new Error(`Missing one of: ${fileSpec.join(', ')}`);
@@ -86,7 +87,7 @@ function resolveRequiredFile(releasePath, fileSpec) {
   if (!fs.existsSync(filePath)) {
     throw new Error(`Missing required ANGLE output: ${filePath}`);
   }
-  return fileSpec;
+  return {sourceName: fileSpec, outputName: fileSpec};
 }
 
 function stageAngleTree(sourcePath, stagingPath, platform) {
@@ -115,10 +116,10 @@ function stageAngleTree(sourcePath, stagingPath, platform) {
   fs.mkdirSync(stagedReleasePath, {recursive: true});
 
   for (const fileSpec of requiredReleaseFiles(platform)) {
-    const fileName = resolveRequiredFile(releasePath, fileSpec);
+    const {sourceName, outputName} = resolveRequiredFile(releasePath, fileSpec);
     copyRecursive(
-        path.join(releasePath, fileName),
-        path.join(stagedReleasePath, fileName));
+        path.join(releasePath, sourceName),
+        path.join(stagedReleasePath, outputName));
   }
   copyRecursive(includePath, path.join(stagedAnglePath, 'include'));
 }
@@ -141,6 +142,9 @@ function main() {
   const sourcePath = path.resolve(args.source || '');
   const version = args.version;
   const outputDir = path.resolve(args['out-dir'] || '');
+  const installDir = args['install-dir'] ?
+      path.resolve(args['install-dir']) :
+      null;
   if (!sourcePath || !version || !outputDir) {
     usage();
     process.exit(1);
@@ -160,6 +164,10 @@ function main() {
 
   try {
     stageAngleTree(sourcePath, stagingPath, platform);
+    if (installDir !== null) {
+      fs.rmSync(installDir, {recursive: true, force: true});
+      copyRecursive(path.join(stagingPath, 'angle'), installDir);
+    }
     fs.rmSync(outputPath, {force: true});
     createArchive(stagingPath, outputPath, platform);
   } finally {

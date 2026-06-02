@@ -88,9 +88,9 @@ Installer overrides:
 - `NODE_GLES_ANGLE_BASE_URI`: archive base URL
 - `NODE_GLES_ANGLE_SHA256`: optional archive checksum verification
 
-ARM64 ANGLE archives are built by the manual `Build ANGLE ARM64` workflow and
-uploaded as GitHub Release assets. The experimental ARM64 CI workflow uses those
-release assets by default.
+ARM64 CI builds ANGLE from source on ARM64 runners before building the native
+addon. The manual `Build ANGLE ARM64` workflow can still publish reusable ANGLE
+archives as GitHub Release assets.
 
 On Linux, the native build needs X11 development headers. On Ubuntu:
 
@@ -105,9 +105,9 @@ sudo apt-get install -y build-essential python3 libx11-dev
 | Linux x64     | CI-tested. Requires X11 development headers for native builds.                                       |
 | macOS x64     | CI-tested with the default ANGLE archive.                                                            |
 | Windows x64   | CI-tested with the default ANGLE archive and copied ANGLE runtime DLLs.                              |
-| Linux arm64   | Experimental manual CI target. Requires a matching ANGLE archive.                                    |
-| macOS arm64   | Experimental manual CI target. Requires a matching ANGLE archive.                                    |
-| Windows arm64 | Experimental manual CI target. Requires a matching ANGLE archive and Windows ARM64 GitHub runner use. |
+| Linux arm64   | Experimental CI target. Builds ANGLE from source on an ARM64 runner.                                 |
+| macOS arm64   | Experimental CI target. Builds ANGLE from source on an ARM64 runner.                                 |
+| Windows arm64 | Experimental CI target. Builds ANGLE from source on a Windows ARM64 runner.                          |
 
 ## License
 

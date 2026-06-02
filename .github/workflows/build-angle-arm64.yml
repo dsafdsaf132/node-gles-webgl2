@@ -12,7 +12,7 @@ on:
       angle_ref:
         description: "ANGLE git ref to build"
         required: true
-        default: "main"
+        default: "chromium/3729"
         type: string
       release_tag:
         description: "GitHub Release tag for ANGLE assets"
@@ -94,16 +94,24 @@ jobs:
             python3 \
             xz-utils
 
+      - name: Normalize bash paths
+        run: |
+          temp_dir="$RUNNER_TEMP"
+          if command -v cygpath >/dev/null 2>&1; then
+            temp_dir="$(cygpath -u "$RUNNER_TEMP")"
+          fi
+          printf 'RUNNER_TEMP_UNIX=%s\n' "$temp_dir" >> "$GITHUB_ENV"
+
       - name: Install depot_tools
         run: |
-          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$RUNNER_TEMP/depot_tools"
-          echo "$RUNNER_TEMP/depot_tools" >> "$GITHUB_PATH"
+          git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git "$RUNNER_TEMP_UNIX/depot_tools"
+          echo "$RUNNER_TEMP_UNIX/depot_tools" >> "$GITHUB_PATH"
 
       - name: Fetch ANGLE
         run: |
           set -euo pipefail
-          git clone https://chromium.googlesource.com/angle/angle "$RUNNER_TEMP/angle"
-          cd "$RUNNER_TEMP/angle"
+          git clone https://chromium.googlesource.com/angle/angle "$RUNNER_TEMP_UNIX/angle"
+          cd "$RUNNER_TEMP_UNIX/angle"
           git checkout "${{ inputs.angle_ref }}"
           python scripts/bootstrap.py
           gclient sync --no-history --shallow --jobs 8
@@ -111,7 +119,7 @@ jobs:
       - name: Generate ANGLE build files
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/angle"
+          cd "$RUNNER_TEMP_UNIX/angle"
           gn_args='is_debug=false target_cpu="arm64" is_component_build=false symbol_level=0 treat_warnings_as_errors=false'
           if [ "$RUNNER_OS" = "Windows" ]; then
             gn_args="$gn_args is_clang=false"
@@ -121,7 +129,7 @@ jobs:
       - name: Build ANGLE libraries
         run: |
           set -euo pipefail
-          cd "$RUNNER_TEMP/angle"
+          cd "$RUNNER_TEMP_UNIX/angle"
           autoninja -C out/Release libEGL libGLESv2
 
       - name: Package ANGLE archive
@@ -129,9 +137,9 @@ jobs:
         run: |
           set -euo pipefail
           archive_path="$(node scripts/package-angle.js \
-            --source "$RUNNER_TEMP/angle" \
+            --source "$RUNNER_TEMP_UNIX/angle" \
             --version "${{ inputs.archive_version }}" \
-            --out-dir "$RUNNER_TEMP/angle-artifacts")"
+            --out-dir "$RUNNER_TEMP_UNIX/angle-artifacts")"
           echo "archive_path=${archive_path}" >> "$GITHUB_OUTPUT"
           echo "archive_name=$(basename "$archive_path")" >> "$GITHUB_OUTPUT"
 
