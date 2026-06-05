@@ -186,10 +186,12 @@ jobs:
           set -euo pipefail
 
           tag="${{ steps.release.outputs.tag }}"
+          npm_url="https://www.npmjs.com/package/node-gles-webgl2/v/${{ steps.release.outputs.version }}"
+          notes="$(printf 'Release %s\n\nnpm: %s\n' "${tag}" "${npm_url}")"
           if gh release view "${tag}" >/dev/null 2>&1; then
-            echo "GitHub Release ${tag} already exists"
+            gh release edit "${tag}" --notes "${notes}"
           else
             gh release create "${tag}" \
               --title "${tag}" \
-              --notes "Release ${tag}"
+              --notes "${notes}"
           fi

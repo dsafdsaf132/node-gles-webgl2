@@ -34,16 +34,6 @@ The npm tarball does not include ANGLE binaries. During installation,
 [`dsafdsaf132/angle-prebuilt`](https://github.com/dsafdsaf132/angle-prebuilt)
 and builds the native addon locally with `node-gyp`.
 
-From a GitHub source tarball:
-
-```sh
-curl -L https://github.com/dsafdsaf132/node-gles-webgl2/archive/refs/heads/main.tar.gz | tar -xz
-cd node-gles-webgl2-main
-npm install --ignore-scripts
-node scripts/install.js
-npm run build
-```
-
 ## Usage
 
 ```js
