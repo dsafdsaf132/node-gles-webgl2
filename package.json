@@ -42,6 +42,7 @@
     "scripts/clean-dist.js",
     "scripts/install.js",
     "test/regl-smoke.js",
+    "test/visual-3d-texture-arrays.js",
     "test/webgl2-smoke.js",
     "LICENSE",
     "README.md"
@@ -54,6 +55,7 @@
     "install": "node scripts/install.js",
     "test": "npm run test:webgl2 && npm run test:regl",
     "test:regl": "node test/regl-smoke.js",
+    "visual:3d-textures": "node test/visual-3d-texture-arrays.js",
     "test:webgl2": "node test/webgl2-smoke.js"
   },
   "devDependencies": {
