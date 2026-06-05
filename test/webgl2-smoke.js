@@ -152,16 +152,27 @@ function readTexture2DIntegerPixel(gl, texture, x, y) {
 }
 
 function readTextureLayerPixel(gl, texture, layer, x, y) {
+  const previousReadFramebuffer =
+      gl.getParameter(gl.READ_FRAMEBUFFER_BINDING);
+  const previousDrawFramebuffer =
+      gl.getParameter(gl.DRAW_FRAMEBUFFER_BINDING);
+  const previousReadBuffer = gl.getParameter(gl.READ_BUFFER);
   const framebuffer = gl.createFramebuffer();
-  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
-  gl.framebufferTextureLayer(
-      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, layer);
-  assert.strictEqual(
-      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
   const pixel = new Uint8Array(4);
-  gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-  gl.deleteFramebuffer(framebuffer);
+  try {
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, framebuffer);
+    gl.framebufferTextureLayer(
+        gl.READ_FRAMEBUFFER, gl.COLOR_ATTACHMENT0, texture, 0, layer);
+    assert.strictEqual(
+        gl.checkFramebufferStatus(gl.READ_FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+    gl.readBuffer(gl.COLOR_ATTACHMENT0);
+    gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  } finally {
+    gl.bindFramebuffer(gl.READ_FRAMEBUFFER, previousReadFramebuffer);
+    gl.readBuffer(previousReadBuffer);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, previousDrawFramebuffer);
+    gl.deleteFramebuffer(framebuffer);
+  }
   return pixel;
 }
 
@@ -170,6 +181,41 @@ function configureTexture(gl, target) {
   gl.texParameteri(target, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
   gl.texParameteri(target, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
   gl.texParameteri(target, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+
+function configureLayeredTexture(gl, target) {
+  configureTexture(gl, target);
+  gl.texParameteri(target, gl.TEXTURE_WRAP_R, gl.CLAMP_TO_EDGE);
+}
+
+function layeredTexturePixel(layer, x, y) {
+  return [
+    30 + layer * 60 + x * 20,
+    40 + layer * 35 + y * 70,
+    220 - layer * 45 - x * 25 - y * 15,
+    255
+  ];
+}
+
+function layeredTextureData(width, height, layers) {
+  const data = new Uint8Array(width * height * layers * 4);
+  for (let layer = 0; layer < layers; ++layer) {
+    for (let y = 0; y < height; ++y) {
+      for (let x = 0; x < width; ++x) {
+        const offset = (((layer * height + y) * width + x) * 4);
+        data.set(layeredTexturePixel(layer, x, y), offset);
+      }
+    }
+  }
+  return data;
+}
+
+function solidLayeredTextureData(width, height, layers, color) {
+  const data = new Uint8Array(width * height * layers * 4);
+  for (let offset = 0; offset < data.length; offset += 4) {
+    data.set(color, offset);
+  }
+  return data;
 }
 
 function testRequiredWebGL2Methods(gl) {
@@ -1334,6 +1380,138 @@ function testWebGLUnpackTransforms(gl) {
   assertNoError(gl, "WebGL unpack transform uploads");
 }
 
+function testLayeredTextureOperations(gl) {
+  const width = 2;
+  const height = 2;
+  const layers = 3;
+  assert(
+      gl.getParameter(gl.MAX_3D_TEXTURE_SIZE) >= layers,
+      "MAX_3D_TEXTURE_SIZE should support the smoke texture");
+  assert(
+      gl.getParameter(gl.MAX_ARRAY_TEXTURE_LAYERS) >= layers,
+      "MAX_ARRAY_TEXTURE_LAYERS should support the smoke texture");
+
+  const uploadData = layeredTextureData(width, height, layers);
+  const texture3D = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, texture3D);
+  configureLayeredTexture(gl, gl.TEXTURE_3D);
+  gl.texImage3D(
+      gl.TEXTURE_3D, 0, gl.RGBA8, width, height, layers, 0, gl.RGBA,
+      gl.UNSIGNED_BYTE, uploadData);
+  for (let layer = 0; layer < layers; ++layer) {
+    for (let y = 0; y < height; ++y) {
+      for (let x = 0; x < width; ++x) {
+        assertPixelNear(
+            readTextureLayerPixel(gl, texture3D, layer, x, y),
+            layeredTexturePixel(layer, x, y),
+            `texImage3D layer ${layer} pixel ${x},${y}`);
+      }
+    }
+  }
+
+  const textureArray = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, textureArray);
+  configureLayeredTexture(gl, gl.TEXTURE_2D_ARRAY);
+  gl.texStorage3D(
+      gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, width, height, layers);
+  gl.texSubImage3D(
+      gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, width, height, layers, gl.RGBA,
+      gl.UNSIGNED_BYTE, uploadData);
+  for (let layer = 0; layer < layers; ++layer) {
+    for (let y = 0; y < height; ++y) {
+      for (let x = 0; x < width; ++x) {
+        assertPixelNear(
+            readTextureLayerPixel(gl, textureArray, layer, x, y),
+            layeredTexturePixel(layer, x, y),
+            `texSubImage3D array layer ${layer} pixel ${x},${y}`);
+      }
+    }
+  }
+
+  const partial3D = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, partial3D);
+  configureLayeredTexture(gl, gl.TEXTURE_3D);
+  gl.texStorage3D(gl.TEXTURE_3D, 1, gl.RGBA8, width, height, layers);
+  gl.texSubImage3D(
+      gl.TEXTURE_3D, 0, 1, 1, 2, 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE,
+      new Uint8Array([9, 99, 199, 255]));
+  assertPixelNear(
+      readTextureLayerPixel(gl, partial3D, 2, 1, 1), [9, 99, 199, 255],
+      "texSubImage3D partial 3D upload");
+
+  const sourcePixels = new Uint8Array([
+    11, 22, 33, 255, 44, 55, 66, 255,
+    77, 88, 99, 255, 111, 122, 133, 255
+  ]);
+  const sourceTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, sourceTexture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA8, width, height, 0, gl.RGBA,
+      gl.UNSIGNED_BYTE, sourcePixels);
+  const sourceFramebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, sourceFramebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, sourceTexture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  gl.readBuffer(gl.COLOR_ATTACHMENT0);
+
+  const copiedArray = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D_ARRAY, copiedArray);
+  configureLayeredTexture(gl, gl.TEXTURE_2D_ARRAY);
+  gl.texStorage3D(
+      gl.TEXTURE_2D_ARRAY, 1, gl.RGBA8, width, height, layers);
+  gl.texSubImage3D(
+      gl.TEXTURE_2D_ARRAY, 0, 0, 0, 0, width, height, layers, gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      solidLayeredTextureData(width, height, layers, [1, 2, 3, 255]));
+  gl.copyTexSubImage3D(gl.TEXTURE_2D_ARRAY, 0, 0, 0, 1, 0, 0, width, height);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(sourceFramebuffer);
+  for (let y = 0; y < height; ++y) {
+    for (let x = 0; x < width; ++x) {
+      const sourceOffset = ((y * width + x) * 4);
+      assertPixelNear(
+          readTextureLayerPixel(gl, copiedArray, 1, x, y),
+          Array.from(sourcePixels.subarray(sourceOffset, sourceOffset + 4)),
+          `copyTexSubImage3D array layer pixel ${x},${y}`);
+    }
+  }
+  assertPixelNear(
+      readTextureLayerPixel(gl, copiedArray, 0, 1, 1), [1, 2, 3, 255],
+      "copyTexSubImage3D keeps untouched array layer");
+
+  const rendered3D = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_3D, rendered3D);
+  configureLayeredTexture(gl, gl.TEXTURE_3D);
+  gl.texStorage3D(gl.TEXTURE_3D, 1, gl.RGBA8, width, height, layers);
+  gl.texSubImage3D(
+      gl.TEXTURE_3D, 0, 0, 0, 0, width, height, layers, gl.RGBA,
+      gl.UNSIGNED_BYTE,
+      solidLayeredTextureData(width, height, layers, [4, 5, 6, 255]));
+  const layerFramebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, layerFramebuffer);
+  gl.framebufferTextureLayer(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, rendered3D, 0, 2);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  gl.viewport(0, 0, width, height);
+  gl.clearColor(0.8, 0.2, 0.4, 1.0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.deleteFramebuffer(layerFramebuffer);
+  assertPixelNear(
+      readTextureLayerPixel(gl, rendered3D, 2, 1, 1), [204, 51, 102, 255],
+      "framebufferTextureLayer 3D render target");
+  assertPixelNear(
+      readTextureLayerPixel(gl, rendered3D, 0, 1, 1), [4, 5, 6, 255],
+      "framebufferTextureLayer keeps untouched 3D layer");
+
+  gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight);
+  assertNoError(gl, "layered texture operations");
+}
+
 function testFragmentShaderGpgpuMatrixMultiply(gl) {
   const matrixA = [
     [1, 2, 0, 1],
@@ -2065,6 +2243,7 @@ testNonSquareUniformMatrices(gl);
 testExtensionAliasCalls(gl);
 testWebGLOnlyPixelStore(gl);
 testWebGLUnpackTransforms(gl);
+testLayeredTextureOperations(gl);
 testFragmentShaderGpgpuMatrixMultiply(gl);
 testFragmentShaderGpgpuFloatMatrixMultiply(gl);
 testFragmentShaderGpgpuUnsignedIntegerMatrixMultiply(gl);
