@@ -816,6 +816,12 @@ function testQueryObjects(gl) {
   assert.strictEqual(gl.isQuery(null), false);
   assert.strictEqual(
       gl.getQuery(gl.ANY_SAMPLES_PASSED, gl.CURRENT_QUERY), null);
+  assert.strictEqual(
+      gl.getQuery(gl.ANY_SAMPLES_PASSED, gl.QUERY_RESULT), null);
+  assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+  assert.strictEqual(
+      gl.getQuery(gl.TRANSFORM_FEEDBACK, gl.CURRENT_QUERY), null);
+  assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
 
   const program = createProgramFromSources(gl, `#version 300 es
 void main() {
@@ -2465,6 +2471,11 @@ function testWebGL2PixelStoreIsGatedForES2() {
       const error = gl.getError();
       assert(error === gl.NO_ERROR || error === gl.INVALID_ENUM,
              "unexpected ES2 pixel-store query error " + error);
+      gl.getError();
+      const transformFeedbackActive =
+          gl.getParameter(gl.TRANSFORM_FEEDBACK_ACTIVE);
+      assert.strictEqual(transformFeedbackActive, null);
+      assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
       gl.getError();
       const texture = gl.createTexture();
       gl.bindTexture(gl.TEXTURE_2D, texture);

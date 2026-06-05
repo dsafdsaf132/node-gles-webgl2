@@ -92,12 +92,12 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
   createQuery(): WebGLResourceHandle<WebGLQuery>;
   deleteQuery(query: WebGLResourceHandle<WebGLQuery>): void;
   isQuery(query: WebGLResourceHandle<WebGLQuery>): boolean;
-  beginQuery(target: number, query: WebGLResourceHandle<WebGLQuery>): void;
+  beginQuery(target: number, query: WebGLNonNullResourceHandle<WebGLQuery>): void;
   endQuery(target: number): void;
   getQuery(
     target: number, pname: number): WebGLResourceHandle<WebGLQuery>;
   getQueryParameter(
-    query: WebGLResourceHandle<WebGLQuery>, pname: number): unknown;
+    query: WebGLNonNullResourceHandle<WebGLQuery>, pname: number): unknown;
   createSampler(): WebGLResourceHandle<WebGLSampler>;
   deleteSampler(sampler: WebGLResourceHandle<WebGLSampler>): void;
   isSampler(sampler: WebGLResourceHandle<WebGLSampler>): boolean;
