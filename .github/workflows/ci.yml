@@ -24,6 +24,9 @@ jobs:
             runner: ubuntu-24.04-arm
           - name: macos-arm64
             runner: macos-15
+          - name: macos-x64
+            runner: macos-15-intel
+            runtime_smoke: false
           - name: windows-x64
             runner: windows-latest
           - name: windows-arm64
@@ -59,9 +62,15 @@ jobs:
         run: npm run build
 
       - name: Smoke test WebGL2 bindings on Linux
-        if: runner.os == 'Linux'
+        if: runner.os == 'Linux' && matrix.runtime_smoke != false
         run: xvfb-run -a npm test
 
       - name: Smoke test WebGL2 bindings
-        if: runner.os != 'Linux'
+        if: runner.os != 'Linux' && matrix.runtime_smoke != false
         run: npm test
+
+      - name: Skip runtime smoke
+        if: matrix.runtime_smoke == false
+        run: |
+          echo "Build and link are validated for ${{ matrix.name }}."
+          echo "Runtime smoke is skipped because ANGLE EGL display creation is not reliable on GitHub-hosted macOS x64 runners."

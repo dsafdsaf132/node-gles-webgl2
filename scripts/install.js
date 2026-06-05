@@ -45,9 +45,6 @@ if (arch !== 'x64' && arch !== 'arm64') {
   throw new Error(`The architecture ${arch} is not currently supported!`);
 }
 const platformArch = `${platform}-${arch}`;
-if (platformArch === 'darwin-x64') {
-  throw new Error('The platform darwin-x64 is not currently supported!');
-}
 const ANGLE_RELEASE_REPOSITORY =
     process.env.NODE_GLES_ANGLE_RELEASE_REPOSITORY ||
     'dsafdsaf132/angle-prebuilt';

@@ -23,14 +23,14 @@ through WebGL2-compatible JavaScript method names.
 
 ## Platform Support
 
-| Platform      | Status | Notes                                                                                                |
-| ------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| Linux x64     | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
-| Linux arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
-| macOS arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive.                                                    |
-| macOS x64     | ❌     | Not supported by the default ANGLE prebuilt archive set.                                              |
-| Windows x64   | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
-| Windows arm64 | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.  
+| Platform      | CI                                                                 |
+| ------------- | ------------------------------------------------------------------ |
+| Linux x64     | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
+| Linux arm64   | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
+| macOS arm64   | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
+| macOS x64     | ![build only](https://img.shields.io/badge/CI-build%20only-yellow) |
+| Windows x64   | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
+| Windows arm64 | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
 
 ## Install
 
@@ -108,7 +108,7 @@ On Linux, the native build needs X11 development headers. On Ubuntu:
 
 ```sh
 sudo apt-get install -y build-essential python3 libx11-dev libxext-dev
-```                    |
+```
 
 ## License
 
