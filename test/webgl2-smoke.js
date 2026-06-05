@@ -220,13 +220,37 @@ function solidLayeredTextureData(width, height, layers, color) {
 
 function testRequiredWebGL2Methods(gl) {
   const required = [
+    "beginQuery",
+    "beginTransformFeedback",
+    "bindTransformFeedback",
     "createVertexArray",
+    "createQuery",
+    "createTransformFeedback",
     "bindVertexArray",
+    "deleteQuery",
+    "deleteTransformFeedback",
     "deleteVertexArray",
+    "endQuery",
+    "endTransformFeedback",
+    "getQuery",
+    "getQueryParameter",
+    "getTransformFeedbackVarying",
+    "getVertexAttribIiv",
+    "getVertexAttribIuiv",
+    "isQuery",
+    "isTransformFeedback",
     "isVertexArray",
+    "pauseTransformFeedback",
+    "resumeTransformFeedback",
+    "transformFeedbackVaryings",
     "drawArraysInstanced",
     "drawElementsInstanced",
-    "vertexAttribDivisor"
+    "vertexAttribDivisor",
+    "vertexAttribI4i",
+    "vertexAttribI4iv",
+    "vertexAttribI4ui",
+    "vertexAttribI4uiv",
+    "vertexAttribIPointer"
   ];
   for (const name of required) {
     assert.strictEqual(typeof gl[name], "function", `${name} is missing`);
@@ -785,6 +809,239 @@ void main() {
   gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
   assertPixelNear(pixel, [0, 255, 0, 255], "non-square uniform matrices");
   assertNoError(gl, "non-square uniform matrices");
+}
+
+function testQueryObjects(gl) {
+  const query = gl.createQuery();
+  assert.strictEqual(gl.isQuery(null), false);
+  assert.strictEqual(
+      gl.getQuery(gl.ANY_SAMPLES_PASSED, gl.CURRENT_QUERY), null);
+
+  const program = createProgramFromSources(gl, `#version 300 es
+void main() {
+  vec2 positions[3] = vec2[3](
+      vec2(-1.0, -1.0),
+      vec2(3.0, -1.0),
+      vec2(-1.0, 3.0));
+  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+out vec4 out_color;
+void main() {
+  out_color = vec4(1.0);
+}
+`);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, 16, 16);
+  gl.useProgram(program);
+  gl.beginQuery(gl.ANY_SAMPLES_PASSED, query);
+  assert.strictEqual(
+      gl.getQuery(gl.ANY_SAMPLES_PASSED, gl.CURRENT_QUERY), query);
+  assert.strictEqual(gl.isQuery(query), true);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.endQuery(gl.ANY_SAMPLES_PASSED);
+  assert.strictEqual(
+      gl.getQuery(gl.ANY_SAMPLES_PASSED, gl.CURRENT_QUERY), null);
+  gl.finish();
+  assert.strictEqual(
+      gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE), true);
+  assert(gl.getQueryParameter(query, gl.QUERY_RESULT) > 0,
+         "ANY_SAMPLES_PASSED should report drawn samples");
+  gl.deleteQuery(query);
+  gl.deleteProgram(program);
+  assert.strictEqual(gl.isQuery(query), false);
+  assertNoError(gl, "query objects");
+}
+
+function testTransformFeedbackObjects(gl) {
+  const vertexShader = compileShader(gl, gl.VERTEX_SHADER, `#version 300 es
+precision highp float;
+in float a_value;
+out float v_value;
+void main() {
+  v_value = a_value * 2.0;
+  gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+  gl_PointSize = 1.0;
+}
+`);
+  const fragmentShader = compileShader(gl, gl.FRAGMENT_SHADER, `#version 300 es
+precision highp float;
+out vec4 out_color;
+void main() {
+  out_color = vec4(0.0, 0.0, 0.0, 1.0);
+}
+`);
+  const program = gl.createProgram();
+  gl.attachShader(program, vertexShader);
+  gl.attachShader(program, fragmentShader);
+  gl.transformFeedbackVaryings(program, ["v_value"], gl.INTERLEAVED_ATTRIBS);
+  gl.linkProgram(program);
+  assert.strictEqual(
+      gl.getProgramParameter(program, gl.LINK_STATUS), true,
+      gl.getProgramInfoLog(program));
+
+  const varying = gl.getTransformFeedbackVarying(program, 0);
+  assert.notStrictEqual(varying, null, "transform feedback varying missing");
+  assert.strictEqual(varying.name, "v_value");
+  assert.strictEqual(varying.size, 1);
+  assert.strictEqual(varying.type, gl.FLOAT);
+
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+  const inputBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, inputBuffer);
+  gl.bufferData(
+      gl.ARRAY_BUFFER, new Float32Array([1, 2, 3, 4]), gl.STATIC_DRAW);
+  const valueLocation = gl.getAttribLocation(program, "a_value");
+  assert(valueLocation >= 0, "a_value location not found");
+  gl.vertexAttribPointer(valueLocation, 1, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(valueLocation);
+
+  const outputBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, outputBuffer);
+  gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER, 4 * 4, gl.DYNAMIC_READ);
+
+  const transformFeedback = gl.createTransformFeedback();
+  assert.strictEqual(gl.isTransformFeedback(null), false);
+  gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, transformFeedback);
+  assert.strictEqual(gl.isTransformFeedback(transformFeedback), true);
+  gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, outputBuffer);
+
+  const query = gl.createQuery();
+  gl.useProgram(program);
+  gl.enable(gl.RASTERIZER_DISCARD);
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_ACTIVE), false);
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_PAUSED), false);
+  gl.beginQuery(gl.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, query);
+  gl.beginTransformFeedback(gl.POINTS);
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_ACTIVE), true);
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_PAUSED), false);
+  gl.pauseTransformFeedback();
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_PAUSED), true);
+  gl.resumeTransformFeedback();
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_PAUSED), false);
+  gl.drawArrays(gl.POINTS, 0, 4);
+  gl.endTransformFeedback();
+  gl.endQuery(gl.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN);
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_ACTIVE), false);
+  assert.strictEqual(gl.getParameter(gl.TRANSFORM_FEEDBACK_PAUSED), false);
+  gl.disable(gl.RASTERIZER_DISCARD);
+
+  gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, outputBuffer);
+  const captured = new Float32Array(4);
+  gl.getBufferSubData(gl.TRANSFORM_FEEDBACK_BUFFER, 0, captured);
+  assertArrayNear(
+      Array.from(captured), [2, 4, 6, 8], "transform feedback capture");
+
+  gl.finish();
+  assert.strictEqual(
+      gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE), true);
+  assert.strictEqual(
+      gl.getQueryParameter(query, gl.QUERY_RESULT), 4,
+      "transform feedback primitives written");
+
+  gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, null);
+  gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, null);
+  gl.bindVertexArray(null);
+  gl.bindBuffer(gl.TRANSFORM_FEEDBACK_BUFFER, null);
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  gl.deleteQuery(query);
+  gl.deleteTransformFeedback(transformFeedback);
+  gl.deleteBuffer(outputBuffer);
+  gl.deleteBuffer(inputBuffer);
+  gl.deleteVertexArray(vao);
+  gl.deleteProgram(program);
+  gl.deleteShader(fragmentShader);
+  gl.deleteShader(vertexShader);
+  assertNoError(gl, "transform feedback objects");
+}
+
+function testIntegerVertexAttributes(gl) {
+  gl.vertexAttribI4i(0, -1, 2, -3, 4);
+  assert.deepStrictEqual(
+      gl.getVertexAttribIiv(0, gl.CURRENT_VERTEX_ATTRIB), [-1, 2, -3, 4]);
+  gl.vertexAttribI4iv(0, new Int32Array([-5, 6, -7, 8]));
+  assert.deepStrictEqual(
+      gl.getVertexAttribIiv(0, gl.CURRENT_VERTEX_ATTRIB), [-5, 6, -7, 8]);
+  gl.vertexAttribI4ui(0, 1, 2, 3, 4);
+  assert.deepStrictEqual(
+      gl.getVertexAttribIuiv(0, gl.CURRENT_VERTEX_ATTRIB), [1, 2, 3, 4]);
+  gl.vertexAttribI4uiv(0, new Uint32Array([5, 6, 7, 8]));
+  assert.deepStrictEqual(
+      gl.getVertexAttribIuiv(0, gl.CURRENT_VERTEX_ATTRIB), [5, 6, 7, 8]);
+
+  const program = createProgramFromSources(gl, `#version 300 es
+precision highp float;
+precision highp int;
+in vec2 a_position;
+in uvec4 a_color;
+flat out uvec4 v_color;
+void main() {
+  gl_PointSize = 4.0;
+  gl_Position = vec4(a_position, 0.0, 1.0);
+  v_color = a_color;
+}
+`, `#version 300 es
+precision highp float;
+precision highp int;
+flat in uvec4 v_color;
+out vec4 out_color;
+void main() {
+  out_color = vec4(v_color) / 255.0;
+}
+`);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, 16, 16);
+  gl.clearColor(0, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(program);
+
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  const positionBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.bufferData(
+      gl.ARRAY_BUFFER, new Float32Array([-0.5, -0.5, 0.5, 0.5]),
+      gl.STATIC_DRAW);
+  const positionLocation = gl.getAttribLocation(program, "a_position");
+  assert(positionLocation >= 0, "a_position location not found");
+  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(positionLocation);
+
+  const colorBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+  gl.bufferData(
+      gl.ARRAY_BUFFER,
+      new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255]),
+      gl.STATIC_DRAW);
+  const colorLocation = gl.getAttribLocation(program, "a_color");
+  assert(colorLocation >= 0, "a_color location not found");
+  gl.vertexAttribIPointer(colorLocation, 4, gl.UNSIGNED_BYTE, 0, 0);
+  gl.enableVertexAttribArray(colorLocation);
+  assert.strictEqual(
+      gl.getVertexAttrib(colorLocation, gl.VERTEX_ATTRIB_ARRAY_INTEGER), true);
+  assert.strictEqual(
+      gl.getVertexAttrib(colorLocation, gl.VERTEX_ATTRIB_ARRAY_TYPE),
+      gl.UNSIGNED_BYTE);
+
+  gl.drawArrays(gl.POINTS, 0, 2);
+  assertRedPixel(gl, 4, 4, "integer vertex attribute red point");
+  const pixel = new Uint8Array(4);
+  gl.readPixels(12, 12, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  assertPixelNear(
+      pixel, [0, 255, 0, 255], "integer vertex attribute green point");
+
+  gl.bindVertexArray(null);
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  gl.deleteBuffer(colorBuffer);
+  gl.deleteBuffer(positionBuffer);
+  gl.deleteVertexArray(vao);
+  gl.deleteProgram(program);
+  assertNoError(gl, "integer vertex attributes");
 }
 
 function testDestroyApi() {
@@ -2240,6 +2497,9 @@ testPixelBufferObjectNumericOffsets(gl);
 testMultisampleFramebufferOperations(gl);
 testUnsignedIntegerUniforms(gl);
 testNonSquareUniformMatrices(gl);
+testQueryObjects(gl);
+testTransformFeedbackObjects(gl);
+testIntegerVertexAttributes(gl);
 testExtensionAliasCalls(gl);
 testWebGLOnlyPixelStore(gl);
 testWebGLUnpackTransforms(gl);
