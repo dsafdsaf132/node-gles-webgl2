@@ -29,13 +29,20 @@ From npm:
 npm install node-gles-webgl2
 ```
 
-From GitHub Packages:
+The npm tarball does not include ANGLE binaries. During installation,
+`scripts/install.js` downloads the latest matching ANGLE prebuilt archive from
+[`dsafdsaf132/angle-prebuilt`](https://github.com/dsafdsaf132/angle-prebuilt)
+and builds the native addon locally with `node-gyp`.
+
+From a GitHub source tarball:
 
 ```sh
-npm install @dsafdsaf132/node-gles-webgl2 --registry=https://npm.pkg.github.com
+curl -L https://github.com/dsafdsaf132/node-gles-webgl2/archive/refs/heads/main.tar.gz | tar -xz
+cd node-gles-webgl2-main
+npm install --ignore-scripts
+node scripts/install.js
+npm run build
 ```
-
-GitHub Packages installs require npm authentication for `npm.pkg.github.com`.
 
 ## Usage
 
@@ -70,6 +77,8 @@ try {
 
 ## Build From Source
 
+From git:
+
 ```sh
 git clone https://github.com/dsafdsaf132/node-gles-webgl2.git
 cd node-gles-webgl2
@@ -77,6 +86,10 @@ npm install --ignore-scripts
 node scripts/install.js
 npm run build
 ```
+
+From a release source tarball, use the same commands after extracting the
+archive. Source tarballs do not contain `deps/angle`; `node scripts/install.js`
+downloads ANGLE into that directory before building the addon.
 
 `scripts/install.js` downloads the latest matching ANGLE prebuilt archive from
 [`dsafdsaf132/angle-prebuilt`](https://github.com/dsafdsaf132/angle-prebuilt)
