@@ -21,6 +21,17 @@ through WebGL2-compatible JavaScript method names.
 | Browser-compatible overloads and error semantics | 🟡 |
 | Browser-complete WebGL2 conformance | ❌ |
 
+## Platform Support
+
+| Platform      | Status | Notes                                                                                                |
+| ------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| Linux x64     | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
+| Linux arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
+| macOS arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive.                                                    |
+| macOS x64     | ❌     | Not supported by the default ANGLE prebuilt archive set.                                              |
+| Windows x64   | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
+| Windows arm64 | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.  
+
 ## Install
 
 From npm:
@@ -29,10 +40,6 @@ From npm:
 npm install node-gles-webgl2
 ```
 
-The npm tarball does not include ANGLE binaries. During installation,
-`scripts/install.js` downloads the latest matching ANGLE prebuilt archive from
-[`dsafdsaf132/angle-prebuilt`](https://github.com/dsafdsaf132/angle-prebuilt)
-and builds the native addon locally with `node-gyp`.
 
 ## Usage
 
@@ -101,18 +108,7 @@ On Linux, the native build needs X11 development headers. On Ubuntu:
 
 ```sh
 sudo apt-get install -y build-essential python3 libx11-dev libxext-dev
-```
-
-## Platform Support
-
-| Platform      | Status | Notes                                                                                                |
-| ------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| Linux x64     | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
-| Linux arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive. Requires X11 development headers for native builds. |
-| macOS arm64   | ✅     | CI-tested with the default ANGLE prebuilt archive.                                                    |
-| macOS x64     | ❌     | Not supported by the default ANGLE prebuilt archive set.                                              |
-| Windows x64   | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
-| Windows arm64 | ✅     | CI-tested with the default ANGLE prebuilt archive and copied ANGLE runtime DLLs.                      |
+```                    |
 
 ## License
 
