@@ -6800,6 +6800,24 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
       return enabled_value;
     }
 
+    case GL_TRANSFORM_FEEDBACK_ACTIVE:
+    case GL_TRANSFORM_FEEDBACK_PAUSED: {
+      if (!context->supports_webgl2_pixel_store_) {
+        QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                        GL_INVALID_ENUM);
+        napi_value null_value;
+        nstatus = napi_get_null(env, &null_value);
+        ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+        return null_value;
+      }
+      GLint enabled = 0;
+      context->eglContextWrapper_->glGetIntegerv(name, &enabled);
+      napi_value enabled_value;
+      nstatus = napi_get_boolean(env, enabled != 0, &enabled_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return enabled_value;
+    }
+
     default: {
       QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
                       GL_INVALID_ENUM);
@@ -7501,10 +7519,27 @@ napi_value WebGLRenderingContext::GetQuery(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glGetQueryiv, nullptr);
 
+  const bool valid_target = args[0] == GL_ANY_SAMPLES_PASSED ||
+                            args[0] == GL_ANY_SAMPLES_PASSED_CONSERVATIVE ||
+                            args[0] == GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN;
+  if (!context->supports_webgl2_pixel_store_ || !valid_target ||
+      args[1] != GL_CURRENT_QUERY) {
+    QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                    GL_INVALID_ENUM);
+    napi_value null_value;
+    nstatus = napi_get_null(env, &null_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return null_value;
+  }
+
   GLint param = 0;
   context->eglContextWrapper_->glGetQueryiv(args[0], args[1], &param);
   napi_value param_value;
-  nstatus = napi_create_int32(env, param, &param_value);
+  if (args[1] == GL_CURRENT_QUERY && param == 0) {
+    nstatus = napi_get_null(env, &param_value);
+  } else {
+    nstatus = napi_create_int32(env, param, &param_value);
+  }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   return param_value;
 }

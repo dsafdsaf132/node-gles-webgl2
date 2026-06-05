@@ -17,7 +17,7 @@ through WebGL2-compatible JavaScript method names.
 | Buffer, sampler, sync, and PBO operations | ✅ |
 | WebGL2 uniform and matrix APIs | ✅ |
 | 3D textures and 2D texture arrays | ✅ |
-| Queries, transform feedback, and integer vertex attributes | 🟡 |
+| Queries, transform feedback, and integer vertex attributes | ✅ |
 | Browser-compatible overloads and error semantics | 🟡 |
 | Browser-complete WebGL2 conformance | ❌ |
 

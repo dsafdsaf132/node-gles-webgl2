@@ -16,6 +16,7 @@
  */
 
 type WebGLResourceHandle<T> = T | number | null;
+type WebGLNonNullResourceHandle<T> = T | number;
 
 export type NodeGlesANGLEInstancedArrays = {
   readonly VERTEX_ATTRIB_ARRAY_DIVISOR_ANGLE: number;
@@ -91,9 +92,12 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
   createQuery(): WebGLResourceHandle<WebGLQuery>;
   deleteQuery(query: WebGLResourceHandle<WebGLQuery>): void;
   isQuery(query: WebGLResourceHandle<WebGLQuery>): boolean;
-  beginQuery(target: number, query: WebGLResourceHandle<WebGLQuery>): void;
+  beginQuery(target: number, query: WebGLNonNullResourceHandle<WebGLQuery>): void;
+  endQuery(target: number): void;
+  getQuery(
+    target: number, pname: number): WebGLResourceHandle<WebGLQuery>;
   getQueryParameter(
-    query: WebGLResourceHandle<WebGLQuery>, pname: number): unknown;
+    query: WebGLNonNullResourceHandle<WebGLQuery>, pname: number): unknown;
   createSampler(): WebGLResourceHandle<WebGLSampler>;
   deleteSampler(sampler: WebGLResourceHandle<WebGLSampler>): void;
   isSampler(sampler: WebGLResourceHandle<WebGLSampler>): boolean;
@@ -108,6 +112,16 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
   bindTransformFeedback(
     target: number,
     transformFeedback: WebGLResourceHandle<WebGLTransformFeedback>): void;
+  beginTransformFeedback(primitiveMode: number): void;
+  endTransformFeedback(): void;
+  transformFeedbackVaryings(
+    program: WebGLNonNullResourceHandle<WebGLProgram>, varyings: string[],
+    bufferMode: number): void;
+  getTransformFeedbackVarying(
+    program: WebGLNonNullResourceHandle<WebGLProgram>,
+    index: number): WebGLActiveInfo | null;
+  pauseTransformFeedback(): void;
+  resumeTransformFeedback(): void;
   fenceSync(condition: number, flags: number): WebGLSync | null;
   deleteSync(sync: WebGLSync | null): void;
   isSync(sync: WebGLSync | null): boolean;
@@ -117,6 +131,17 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
     mode: number, count: number, type: number, offset: number,
     instanceCount: number): void;
   vertexAttribDivisor(index: number, divisor: number): void;
+  vertexAttribI4i(
+    index: number, x: number, y: number, z: number, w: number): void;
+  vertexAttribI4iv(index: number, values: Int32Array | number[]): void;
+  vertexAttribI4ui(
+    index: number, x: number, y: number, z: number, w: number): void;
+  vertexAttribI4uiv(index: number, values: Uint32Array | number[]): void;
+  vertexAttribIPointer(
+    index: number, size: number, type: number, stride: number,
+    offset: number): void;
+  getVertexAttribIiv(index: number, pname: number): number[];
+  getVertexAttribIuiv(index: number, pname: number): number[];
   readPixels(
     x: number, y: number, width: number, height: number, format: number,
     type: number, pixels: ArrayBufferView | number, dstOffset?: number): void;
