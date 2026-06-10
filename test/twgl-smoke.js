@@ -72,6 +72,10 @@ void main() {
     const bufferInfo =
         twgl.createBufferInfoFromArrays(gl, coloredRectanglesArrays());
 
+    const tintLocation = gl.getUniformLocation(programInfo.program, "u_tint");
+    assert.notStrictEqual(tintLocation, null);
+    assert.strictEqual(typeof tintLocation, "object");
+    assert.strictEqual(Boolean(tintLocation), true);
     assert.strictEqual(typeof programInfo.uniformSetters.u_tint, "function");
 
     gl.viewport(0, 0, WIDTH, HEIGHT);
