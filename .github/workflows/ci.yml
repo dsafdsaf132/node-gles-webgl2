@@ -72,6 +72,10 @@ jobs:
         if: runner.os == 'Linux' && matrix.runtime_smoke != false
         run: xvfb-run -a npm run test:three
 
+      - name: Smoke test twgl.js integration on Linux
+        if: runner.os == 'Linux' && matrix.runtime_smoke != false
+        run: xvfb-run -a npm run test:twgl
+
       - name: Smoke test WebGL2 bindings
         if: runner.os != 'Linux' && matrix.runtime_smoke != false
         run: npm test
@@ -79,6 +83,10 @@ jobs:
       - name: Smoke test three.js integration
         if: runner.os != 'Linux' && matrix.runtime_smoke != false
         run: npm run test:three
+
+      - name: Smoke test twgl.js integration
+        if: runner.os != 'Linux' && matrix.runtime_smoke != false
+        run: npm run test:twgl
 
       - name: Skip runtime smoke
         if: matrix.runtime_smoke == false
@@ -133,3 +141,7 @@ jobs:
       - name: Smoke test three.js integration under WSL
         shell: wsl-bash {0}
         run: xvfb-run -a npm run test:three
+
+      - name: Smoke test twgl.js integration under WSL
+        shell: wsl-bash {0}
+        run: xvfb-run -a npm run test:twgl
