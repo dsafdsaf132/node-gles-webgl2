@@ -54,7 +54,7 @@
     "ci": "npm run build && npx --yes node-gyp rebuild",
     "format": "clang-format -i -style=Google binding/*.cc binding/*.h",
     "install": "node scripts/install.js",
-    "test": "npm run test:webgl2 && npm run test:regl && npm run test:three",
+    "test": "npm run test:webgl2 && npm run test:regl",
     "test:regl": "node test/regl-smoke.js",
     "test:three": "node test/three-smoke.js",
     "visual:3d-textures": "node test/visual-3d-texture-arrays.js",
