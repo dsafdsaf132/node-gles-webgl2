@@ -133,6 +133,20 @@ export type NodeGlesWEBGLDepthTexture = {
   readonly UNSIGNED_INT_24_8_WEBGL: number;
 };
 
+export type NodeGlesWEBGLCompressedTextureS3TC = {
+  readonly COMPRESSED_RGB_S3TC_DXT1_EXT: number;
+  readonly COMPRESSED_RGBA_S3TC_DXT1_EXT: number;
+  readonly COMPRESSED_RGBA_S3TC_DXT3_EXT: number;
+  readonly COMPRESSED_RGBA_S3TC_DXT5_EXT: number;
+};
+
+export type NodeGlesWEBGLCompressedTextureS3TCSRGB = {
+  readonly COMPRESSED_SRGB_S3TC_DXT1_EXT: number;
+  readonly COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT: number;
+  readonly COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT: number;
+  readonly COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT: number;
+};
+
 export type NodeGlesWEBGLLoseContext = {
   loseContext(): void;
   restoreContext(): void;
@@ -282,6 +296,10 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
     NodeGlesWEBGLDebugRendererInfo | null;
   getExtension(extensionName: "WEBGL_depth_texture"):
     NodeGlesWEBGLDepthTexture | null;
+  getExtension(extensionName: "WEBGL_compressed_texture_s3tc"):
+    NodeGlesWEBGLCompressedTextureS3TC | null;
+  getExtension(extensionName: "WEBGL_compressed_texture_s3tc_srgb"):
+    NodeGlesWEBGLCompressedTextureS3TCSRGB | null;
   getExtension(extensionName: "WEBGL_draw_buffers"):
     NodeGlesWEBGLDrawBuffers | null;
   getExtension(extensionName: "WEBGL_lose_context"):

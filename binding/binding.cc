@@ -52,6 +52,8 @@ static napi_value InitBinding(napi_env env, napi_value exports) {
   OESTextureHalfFloatLinearExtension::Register(env, exports);
   WebGLDebugRendererInfoExtension::Register(env, exports);
   WebGLDepthTextureExtension::Register(env, exports);
+  WebGLCompressedTextureS3TCExtension::Register(env, exports);
+  WebGLCompressedTextureS3TCSRGBExtension::Register(env, exports);
   WebGLLoseContextExtension::Register(env, exports);
   WebGLRenderingContext::Register(env, exports);
 

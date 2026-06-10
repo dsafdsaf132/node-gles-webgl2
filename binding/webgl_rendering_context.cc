@@ -6320,6 +6320,10 @@ DEFINE_EXTENSION_DESCRIPTOR_HELPERS(WebGLDebugRendererInfo,
                                     WebGLDebugRendererInfoExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(WebGLDepthTexture,
                                     WebGLDepthTextureExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(WebGLCompressedTextureS3TC,
+                                    WebGLCompressedTextureS3TCExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(WebGLCompressedTextureS3TCSRGB,
+                                    WebGLCompressedTextureS3TCSRGBExtension)
 
 #undef DEFINE_EXTENSION_DESCRIPTOR_HELPERS
 
@@ -6371,6 +6375,10 @@ static const WebGLExtensionDescriptor kKnownWebGLExtensions[] = {
     {"WEBGL_debug_renderer_info", SupportsWebGLDebugRendererInfo,
      NewWebGLDebugRendererInfo},
     {"WEBGL_depth_texture", SupportsWebGLDepthTexture, NewWebGLDepthTexture},
+    {"WEBGL_compressed_texture_s3tc", SupportsWebGLCompressedTextureS3TC,
+     NewWebGLCompressedTextureS3TC},
+    {"WEBGL_compressed_texture_s3tc_srgb",
+     SupportsWebGLCompressedTextureS3TCSRGB, NewWebGLCompressedTextureS3TCSRGB},
     {"WEBGL_draw_buffers", SupportsWEBGLDrawBuffers, NewWEBGLDrawBuffers},
     {"WEBGL_lose_context", WebGLLoseContextExtension::IsSupported,
      NewWebGLLoseContext},
