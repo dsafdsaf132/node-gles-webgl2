@@ -1,6 +1,6 @@
 # [node-gles-webgl2](https://www.npmjs.com/package/node-gles-webgl2)
 
-Headless WebGL2 / OpenGL ES 3 runtime for Node.js backed by ANGLE.
+Headless WebGL2 / OpenGL ES 3 runtime for Node.js backed by [ANGLE](https://github.com/google/angle).
 
 This package is a fork of [`node-gles`](https://github.com/google/node-gles). It
 preserves the existing WebGL1 surface and exposes additional GLES3-backed APIs
