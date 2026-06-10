@@ -76,6 +76,16 @@ regl@2.1.1:
   resolved "https://registry.yarnpkg.com/regl/-/regl-2.1.1.tgz#fb3eecbc684031ec6172f68aaab2cbe9c3aa3148"
   integrity sha512-+IOGrxl3FZ8ZM9ixCWQZzFRiRn7Rzn9bu3iFHwg/yz4tlOUQgbO4PHLgG+1ZT60zcIV8tief6Qrmyl8qcoJP0g==
 
+three@0.184.0:
+  version "0.184.0"
+  resolved "https://registry.yarnpkg.com/three/-/three-0.184.0.tgz#5bca0a3851eea5345e4c205567b40dfa49b791b5"
+  integrity sha512-wtTRjG92pM5eUg/KuUnHsqSAlPM296brTOcLgMRqEeylYTh/CdtvKUvCyyCQTzFuStieWxvZb8mVTMvdPyUpxg==
+
+twgl.js@7.0.0:
+  version "7.0.0"
+  resolved "https://registry.yarnpkg.com/twgl.js/-/twgl.js-7.0.0.tgz#cb8f47d4b588b5ce71a6d67a413333bed7502b8c"
+  integrity sha512-9HHZ8emdZb2nKPU0FDIGDlkp6AD9rWFv7ThqdbmUqyBhD3WTQpLN+89w4B+YshGwD1fL6PMVpVKZqC0pikgmcA==
+
 typescript@3.0.3:
   version "3.0.3"
   resolved "https://registry.yarnpkg.com/typescript/-/typescript-3.0.3.tgz#4853b3e275ecdaa27f78fda46dc273a7eb7fc1c8"

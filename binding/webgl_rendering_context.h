@@ -21,8 +21,11 @@
 #include <node_api.h>
 
 #include <atomic>
+#include <cstdint>
 #include <deque>
 #include <string>
+#include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "egl_context_wrapper.h"
@@ -54,12 +57,20 @@ class WebGLRenderingContext {
                                           napi_value context_value);
   bool HasNativeResources() const;
   bool EnsureNativeContextCurrent() const;
+  void QueueError(GLenum error);
+  GLuint GetCurrentProgram() const;
+  uint64_t GetContextId() const;
+  uint64_t GetProgramGeneration(GLuint program) const;
 
  private:
   WebGLRenderingContext(napi_env env, GLContextOptions opts);
   ~WebGLRenderingContext();
   void DestroyNativeResources();
   bool IsExtensionAllowed(const char* extension_name) const;
+  void RegisterProgram(GLuint program);
+  void MarkProgramLinked(GLuint program);
+  void MarkProgramDeleted(GLuint program);
+  void FinalizeDeletedProgramIfUnused(GLuint program);
 
   static napi_value InitInternal(napi_env env, napi_callback_info info);
   static void Cleanup(napi_env env, void* native, void* hint);
@@ -351,6 +362,10 @@ class WebGLRenderingContext {
   bool has_enabled_extensions_filter_;
   std::vector<std::string> enabled_extensions_;
   std::vector<std::string> disabled_extensions_;
+  uint64_t context_id_;
+  uint64_t next_program_generation_;
+  std::unordered_map<GLuint, uint64_t> program_generations_;
+  std::unordered_set<GLuint> deleted_programs_;
 
   std::atomic<size_t> alloc_count_;
 };
