@@ -63,7 +63,7 @@ backend.
 | `WEBGL_draw_buffers` | Exposed |
 | `WEBGL_lose_context` | Exposed |
 | `EXT_disjoint_timer_query` / `EXT_disjoint_timer_query_webgl2` | Not exposed |
-| `WEBGL_compressed_texture_s3tc` / `WEBGL_compressed_texture_s3tc_srgb` | Not exposed |
+| `WEBGL_compressed_texture_s3tc` / `WEBGL_compressed_texture_s3tc_srgb` | Exposed |
 
 ## Install
 

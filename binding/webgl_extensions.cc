@@ -50,6 +50,59 @@ static void RequestExtensionIfAvailable(EGLContextWrapper* egl_context_wrapper,
   }
 }
 
+static bool IsExtensionAvailable(EGLContextWrapper* egl_context_wrapper,
+                                 const char* ext_name) {
+  return egl_context_wrapper->angle_requestable_extensions->HasExtension(
+             ext_name) ||
+         egl_context_wrapper->gl_extensions->HasExtension(ext_name);
+}
+
+static bool IsAnyExtensionAvailable(EGLContextWrapper* egl_context_wrapper,
+                                    const char* const* ext_names,
+                                    size_t ext_count) {
+  for (size_t i = 0; i < ext_count; ++i) {
+    if (IsExtensionAvailable(egl_context_wrapper, ext_names[i])) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static bool IsS3TCTextureCompressionSupported(
+    EGLContextWrapper* egl_context_wrapper) {
+  static const char* kDxt1Extensions[] = {
+      "GL_EXT_texture_compression_s3tc",
+      "GL_EXT_texture_compression_dxt1",
+  };
+  static const char* kDxt3Extensions[] = {
+      "GL_EXT_texture_compression_s3tc",
+      "GL_ANGLE_texture_compression_dxt3",
+  };
+  static const char* kDxt5Extensions[] = {
+      "GL_EXT_texture_compression_s3tc",
+      "GL_ANGLE_texture_compression_dxt5",
+  };
+
+  return IsAnyExtensionAvailable(egl_context_wrapper, kDxt1Extensions,
+                                 ARRAY_SIZE(kDxt1Extensions)) &&
+         IsAnyExtensionAvailable(egl_context_wrapper, kDxt3Extensions,
+                                 ARRAY_SIZE(kDxt3Extensions)) &&
+         IsAnyExtensionAvailable(egl_context_wrapper, kDxt5Extensions,
+                                 ARRAY_SIZE(kDxt5Extensions));
+}
+
+static void RequestS3TCTextureCompressionExtensions(
+    EGLContextWrapper* egl_context_wrapper) {
+  RequestExtensionIfAvailable(egl_context_wrapper,
+                              "GL_EXT_texture_compression_s3tc");
+  RequestExtensionIfAvailable(egl_context_wrapper,
+                              "GL_EXT_texture_compression_dxt1");
+  RequestExtensionIfAvailable(egl_context_wrapper,
+                              "GL_ANGLE_texture_compression_dxt3");
+  RequestExtensionIfAvailable(egl_context_wrapper,
+                              "GL_ANGLE_texture_compression_dxt5");
+}
+
 //==============================================================================
 // GLExtensionBase
 
@@ -954,6 +1007,128 @@ napi_status WebGLDepthTextureExtension::NewInstance(
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
   egl_context_wrapper->glRequestExtensionANGLE("GL_ANGLE_depth_texture");
+  egl_context_wrapper->RefreshGLExtensions();
+
+  return napi_ok;
+}
+
+//==============================================================================
+// WebGLCompressedTextureS3TCExtension
+
+napi_ref WebGLCompressedTextureS3TCExtension::constructor_ref_;
+
+WebGLCompressedTextureS3TCExtension::WebGLCompressedTextureS3TCExtension(
+    napi_env env)
+    : GLExtensionBase(env) {}
+
+/* static */
+bool WebGLCompressedTextureS3TCExtension::IsSupported(
+    EGLContextWrapper* egl_context_wrapper) {
+  return IsS3TCTextureCompressionSupported(egl_context_wrapper);
+}
+
+/* static */
+napi_status WebGLCompressedTextureS3TCExtension::Register(napi_env env,
+                                                          napi_value exports) {
+  napi_status nstatus;
+
+  napi_property_descriptor properties[] = {
+      NapiDefineIntProperty(env, GL_COMPRESSED_RGB_S3TC_DXT1_EXT,
+                            "COMPRESSED_RGB_S3TC_DXT1_EXT"),
+      NapiDefineIntProperty(env, GL_COMPRESSED_RGBA_S3TC_DXT1_EXT,
+                            "COMPRESSED_RGBA_S3TC_DXT1_EXT"),
+      NapiDefineIntProperty(env, GL_COMPRESSED_RGBA_S3TC_DXT3_EXT,
+                            "COMPRESSED_RGBA_S3TC_DXT3_EXT"),
+      NapiDefineIntProperty(env, GL_COMPRESSED_RGBA_S3TC_DXT5_EXT,
+                            "COMPRESSED_RGBA_S3TC_DXT5_EXT"),
+  };
+
+  napi_value ctor_value;
+  nstatus =
+      napi_define_class(env, "WEBGL_compressed_texture_s3tc", NAPI_AUTO_LENGTH,
+                        GLExtensionBase::InitStubClass, nullptr,
+                        ARRAY_SIZE(properties), properties, &ctor_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  nstatus = napi_create_reference(env, ctor_value, 1, &constructor_ref_);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  return napi_ok;
+}
+
+/* static */
+napi_status WebGLCompressedTextureS3TCExtension::NewInstance(
+    napi_env env, napi_value* instance,
+    EGLContextWrapper* egl_context_wrapper) {
+  ENSURE_EXTENSION_IS_SUPPORTED
+
+  napi_status nstatus = NewInstanceBase(env, constructor_ref_, instance);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  RequestS3TCTextureCompressionExtensions(egl_context_wrapper);
+  egl_context_wrapper->RefreshGLExtensions();
+
+  return napi_ok;
+}
+
+//==============================================================================
+// WebGLCompressedTextureS3TCSRGBExtension
+
+napi_ref WebGLCompressedTextureS3TCSRGBExtension::constructor_ref_;
+
+WebGLCompressedTextureS3TCSRGBExtension::
+    WebGLCompressedTextureS3TCSRGBExtension(napi_env env)
+    : GLExtensionBase(env) {}
+
+/* static */
+bool WebGLCompressedTextureS3TCSRGBExtension::IsSupported(
+    EGLContextWrapper* egl_context_wrapper) {
+  return IsS3TCTextureCompressionSupported(egl_context_wrapper) &&
+         IsExtensionAvailable(egl_context_wrapper,
+                              "GL_EXT_texture_compression_s3tc_srgb");
+}
+
+/* static */
+napi_status WebGLCompressedTextureS3TCSRGBExtension::Register(
+    napi_env env, napi_value exports) {
+  napi_status nstatus;
+
+  napi_property_descriptor properties[] = {
+      NapiDefineIntProperty(env, GL_COMPRESSED_SRGB_S3TC_DXT1_EXT,
+                            "COMPRESSED_SRGB_S3TC_DXT1_EXT"),
+      NapiDefineIntProperty(env, GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT,
+                            "COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT"),
+      NapiDefineIntProperty(env, GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT,
+                            "COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT"),
+      NapiDefineIntProperty(env, GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT,
+                            "COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT"),
+  };
+
+  napi_value ctor_value;
+  nstatus = napi_define_class(env, "WEBGL_compressed_texture_s3tc_srgb",
+                              NAPI_AUTO_LENGTH, GLExtensionBase::InitStubClass,
+                              nullptr, ARRAY_SIZE(properties), properties,
+                              &ctor_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  nstatus = napi_create_reference(env, ctor_value, 1, &constructor_ref_);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  return napi_ok;
+}
+
+/* static */
+napi_status WebGLCompressedTextureS3TCSRGBExtension::NewInstance(
+    napi_env env, napi_value* instance,
+    EGLContextWrapper* egl_context_wrapper) {
+  ENSURE_EXTENSION_IS_SUPPORTED
+
+  napi_status nstatus = NewInstanceBase(env, constructor_ref_, instance);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  RequestS3TCTextureCompressionExtensions(egl_context_wrapper);
+  RequestExtensionIfAvailable(egl_context_wrapper,
+                              "GL_EXT_texture_compression_s3tc_srgb");
   egl_context_wrapper->RefreshGLExtensions();
 
   return napi_ok;

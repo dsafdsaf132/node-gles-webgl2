@@ -241,6 +241,26 @@ class WebGLDepthTextureExtension : public GLExtensionBase {
   virtual ~WebGLDepthTextureExtension() {}
 };
 
+// Provides 'WEBGL_compressed_texture_s3tc':
+// https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_s3tc/
+class WebGLCompressedTextureS3TCExtension : public GLExtensionBase {
+  NAPI_BOOTSTRAP_METHODS
+
+ protected:
+  WebGLCompressedTextureS3TCExtension(napi_env env);
+  virtual ~WebGLCompressedTextureS3TCExtension() {}
+};
+
+// Provides 'WEBGL_compressed_texture_s3tc_srgb':
+// https://registry.khronos.org/webgl/extensions/WEBGL_compressed_texture_s3tc_srgb/
+class WebGLCompressedTextureS3TCSRGBExtension : public GLExtensionBase {
+  NAPI_BOOTSTRAP_METHODS
+
+ protected:
+  WebGLCompressedTextureS3TCSRGBExtension(napi_env env);
+  virtual ~WebGLCompressedTextureS3TCSRGBExtension() {}
+};
+
 // Provides the 'WEBGL_lose_context' extension:
 // https://www.khronos.org/registry/webgl/extensions/WEBGL_lose_context/
 class WebGLLoseContextExtension : public GLExtensionBase {

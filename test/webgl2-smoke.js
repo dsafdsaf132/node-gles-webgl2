@@ -304,6 +304,8 @@ function testSupportedExtensionsReflectGetExtension(gl) {
     "OES_vertex_array_object",
     "WEBGL_debug_renderer_info",
     "WEBGL_depth_texture",
+    "WEBGL_compressed_texture_s3tc",
+    "WEBGL_compressed_texture_s3tc_srgb",
     "WEBGL_draw_buffers",
     "WEBGL_lose_context"
   ];
@@ -357,6 +359,91 @@ function testSupportedExtensionsReflectGetExtension(gl) {
 
   assert.strictEqual(gl.getExtension("NOT_A_WEBGL_EXTENSION"), null);
   assertNoError(gl, "getExtension browser-compatible names");
+}
+
+function testCompressedTextureS3TC(gl) {
+  const supported = gl.getSupportedExtensions();
+  const s3tc = gl.getExtension("WEBGL_compressed_texture_s3tc");
+  const s3tcSRGB = gl.getExtension("WEBGL_compressed_texture_s3tc_srgb");
+  assert.strictEqual(
+      supported.includes("WEBGL_compressed_texture_s3tc"), s3tc !== null,
+      "WEBGL_compressed_texture_s3tc support should match getExtension");
+  assert.strictEqual(
+      supported.includes("WEBGL_compressed_texture_s3tc_srgb"),
+      s3tcSRGB !== null,
+      "WEBGL_compressed_texture_s3tc_srgb support should match getExtension");
+
+  if (!s3tc) {
+    assert.strictEqual(
+        s3tcSRGB, null,
+        "WEBGL_compressed_texture_s3tc_srgb requires base S3TC support");
+    assertNoError(gl, "WEBGL_compressed_texture_s3tc unsupported path");
+    return;
+  }
+
+  const s3tcFormats = [
+    ["COMPRESSED_RGB_S3TC_DXT1_EXT", 0x83f0, 8],
+    ["COMPRESSED_RGBA_S3TC_DXT1_EXT", 0x83f1, 8],
+    ["COMPRESSED_RGBA_S3TC_DXT3_EXT", 0x83f2, 16],
+    ["COMPRESSED_RGBA_S3TC_DXT5_EXT", 0x83f3, 16]
+  ];
+  const compressedFormats =
+      new Set(gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS));
+  for (const [name, value] of s3tcFormats) {
+    assert.strictEqual(s3tc[name], value, `${name} constant`);
+    assert(
+        compressedFormats.has(value),
+        `${name} should be listed in COMPRESSED_TEXTURE_FORMATS`);
+  }
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  for (const [name, , byteLength] of s3tcFormats) {
+    gl.compressedTexImage2D(
+        gl.TEXTURE_2D, 0, s3tc[name], 4, 4, 0,
+        new Uint8Array(byteLength));
+    assertNoError(gl, `${name} compressedTexImage2D`);
+  }
+  gl.deleteTexture(texture);
+
+  if (!s3tcSRGB) {
+    assertNoError(gl, "WEBGL_compressed_texture_s3tc smoke");
+    return;
+  }
+
+  const s3tcSRGBFormats = [
+    ["COMPRESSED_SRGB_S3TC_DXT1_EXT", 0x8c4c, 8],
+    ["COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT", 0x8c4d, 8],
+    ["COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT", 0x8c4e, 16],
+    ["COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT", 0x8c4f, 16]
+  ];
+  const srgbCompressedFormats =
+      new Set(gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS));
+  for (const [name, value] of s3tcSRGBFormats) {
+    assert.strictEqual(s3tcSRGB[name], value, `${name} constant`);
+    assert(
+        srgbCompressedFormats.has(value),
+        `${name} should be listed in COMPRESSED_TEXTURE_FORMATS`);
+  }
+
+  const srgbTexture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, srgbTexture);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  for (const [name, , byteLength] of s3tcSRGBFormats) {
+    gl.compressedTexImage2D(
+        gl.TEXTURE_2D, 0, s3tcSRGB[name], 4, 4, 0,
+        new Uint8Array(byteLength));
+    assertNoError(gl, `${name} compressedTexImage2D`);
+  }
+  gl.deleteTexture(srgbTexture);
+  assertNoError(gl, "WEBGL_compressed_texture_s3tc_srgb smoke");
 }
 
 function testExtensionCreationOptions() {
@@ -2735,6 +2822,7 @@ const gl = createContext();
 console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
 testSupportedExtensionsReflectGetExtension(gl);
+testCompressedTextureS3TC(gl);
 testExtensionCreationOptions();
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
