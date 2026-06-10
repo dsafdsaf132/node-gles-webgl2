@@ -42,6 +42,7 @@
     "scripts/clean-dist.js",
     "scripts/install.js",
     "test/regl-smoke.js",
+    "test/three-smoke.js",
     "test/visual-3d-texture-arrays.js",
     "test/webgl2-smoke.js",
     "LICENSE",
@@ -53,8 +54,9 @@
     "ci": "npm run build && npx --yes node-gyp rebuild",
     "format": "clang-format -i -style=Google binding/*.cc binding/*.h",
     "install": "node scripts/install.js",
-    "test": "npm run test:webgl2 && npm run test:regl",
+    "test": "npm run test:webgl2 && npm run test:regl && npm run test:three",
     "test:regl": "node test/regl-smoke.js",
+    "test:three": "node test/three-smoke.js",
     "visual:3d-textures": "node test/visual-3d-texture-arrays.js",
     "test:webgl2": "node test/webgl2-smoke.js"
   },
@@ -64,6 +66,7 @@
     "@types/progress": "2.0.3",
     "@types/webgl2": "0.0.4",
     "regl": "2.1.1",
+    "three": "0.184.0",
     "typescript": "3.0.3"
   },
   "dependencies": {
