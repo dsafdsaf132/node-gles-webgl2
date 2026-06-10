@@ -6229,11 +6229,14 @@ DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTColorBufferFloat,
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTColorBufferHalfFloat,
                                     EXTColorBufferHalfFloatExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTFragDepth, EXTFragDepthExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTFloatBlend, EXTFloatBlendExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTSRGB, EXTSRGBExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTShaderTextureLod,
                                     EXTShaderTextureLodExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTTextureFilterAnisotropic,
                                     EXTTextureFilterAnisotropicExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTTextureMirrorClampToEdge,
+                                    EXTTextureMirrorClampToEdgeExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESElementIndexUint,
                                     OESElementIndexUintExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(OESStandardDerivatives,
@@ -6276,11 +6279,14 @@ static const WebGLExtensionDescriptor kKnownWebGLExtensions[] = {
     {"EXT_color_buffer_half_float", SupportsEXTColorBufferHalfFloat,
      NewEXTColorBufferHalfFloat},
     {"EXT_frag_depth", SupportsEXTFragDepth, NewEXTFragDepth},
+    {"EXT_float_blend", SupportsEXTFloatBlend, NewEXTFloatBlend},
     {"EXT_sRGB", SupportsEXTSRGB, NewEXTSRGB},
     {"EXT_shader_texture_lod", SupportsEXTShaderTextureLod,
      NewEXTShaderTextureLod},
     {"EXT_texture_filter_anisotropic", SupportsEXTTextureFilterAnisotropic,
      NewEXTTextureFilterAnisotropic},
+    {"EXT_texture_mirror_clamp_to_edge", SupportsEXTTextureMirrorClampToEdge,
+     NewEXTTextureMirrorClampToEdge},
     {"OES_element_index_uint", SupportsOESElementIndexUint,
      NewOESElementIndexUint},
     {"OES_standard_derivatives", SupportsOESStandardDerivatives,

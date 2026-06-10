@@ -111,6 +111,16 @@ class EXTFragDepthExtension : public GLExtensionBase {
   virtual ~EXTFragDepthExtension() {}
 };
 
+// Provides 'EXT_float_blend':
+// https://registry.khronos.org/webgl/extensions/EXT_float_blend/
+class EXTFloatBlendExtension : public GLExtensionBase {
+  NAPI_BOOTSTRAP_METHODS
+
+ protected:
+  EXTFloatBlendExtension(napi_env env);
+  virtual ~EXTFloatBlendExtension() {}
+};
+
 // Provides 'EXT_shader_texture_lod':
 // https://www.khronos.org/registry/webgl/extensions/EXT_shader_texture_lod/
 class EXTShaderTextureLodExtension : public GLExtensionBase {
@@ -139,6 +149,16 @@ class EXTTextureFilterAnisotropicExtension : public GLExtensionBase {
  protected:
   EXTTextureFilterAnisotropicExtension(napi_env env);
   virtual ~EXTTextureFilterAnisotropicExtension() {}
+};
+
+// Provides 'EXT_texture_mirror_clamp_to_edge':
+// https://registry.khronos.org/webgl/extensions/EXT_texture_mirror_clamp_to_edge/
+class EXTTextureMirrorClampToEdgeExtension : public GLExtensionBase {
+  NAPI_BOOTSTRAP_METHODS
+
+ protected:
+  EXTTextureMirrorClampToEdgeExtension(napi_env env);
+  virtual ~EXTTextureMirrorClampToEdgeExtension() {}
 };
 
 // Provides 'OES_element_index_uint':

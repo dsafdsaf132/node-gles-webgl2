@@ -77,6 +77,12 @@ export type NodeGlesWEBGLDrawBuffers = {
   drawBuffersWEBGL(buffers: number[] | Uint32Array): void;
 };
 
+export type NodeGlesEXTFloatBlend = {};
+
+export type NodeGlesEXTTextureMirrorClampToEdge = {
+  readonly MIRROR_CLAMP_TO_EDGE_EXT: number;
+};
+
 export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
   drawingBufferColorSpace: "srgb" | "display-p3";
   readonly drawingBufferFormat: number;
@@ -183,6 +189,10 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
     srcOffsetOrOffset?: number, srcLengthOverride?: number): void;
   getExtension(extensionName: "ANGLE_instanced_arrays"):
     NodeGlesANGLEInstancedArrays | null;
+  getExtension(extensionName: "EXT_float_blend"):
+    NodeGlesEXTFloatBlend | null;
+  getExtension(extensionName: "EXT_texture_mirror_clamp_to_edge"):
+    NodeGlesEXTTextureMirrorClampToEdge | null;
   getExtension(extensionName: "OES_vertex_array_object"):
     NodeGlesOESVertexArrayObject | null;
   getExtension(extensionName: "WEBGL_draw_buffers"):
