@@ -24,6 +24,9 @@
 
 namespace nodejsgl {
 
+static constexpr GLenum WEBGL_UNMASKED_VENDOR_WEBGL = 0x9245;
+static constexpr GLenum WEBGL_UNMASKED_RENDERER_WEBGL = 0x9246;
+
 // Throws error if extension is not supported:
 #ifndef ENSURE_EXTENSION_IS_SUPPORTED
 #define ENSURE_EXTENSION_IS_SUPPORTED               \
@@ -279,6 +282,61 @@ napi_status EXTColorBufferFloatExtension::NewInstance(
 }
 
 //==============================================================================
+// WebGLColorBufferFloatExtension
+
+napi_ref WebGLColorBufferFloatExtension::constructor_ref_;
+
+WebGLColorBufferFloatExtension::WebGLColorBufferFloatExtension(napi_env env)
+    : GLExtensionBase(env) {}
+
+/* static */
+bool WebGLColorBufferFloatExtension::IsSupported(
+    EGLContextWrapper* egl_context_wrapper) {
+  return EXTColorBufferFloatExtension::IsSupported(egl_context_wrapper);
+}
+
+/* static */
+napi_status WebGLColorBufferFloatExtension::Register(napi_env env,
+                                                     napi_value exports) {
+  napi_status nstatus;
+
+  napi_property_descriptor properties[] = {
+      NapiDefineIntProperty(env, GL_RGBA32F_EXT, "RGBA32F_EXT"),
+      NapiDefineIntProperty(env, GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT,
+                            "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT"),
+      NapiDefineIntProperty(env, GL_UNSIGNED_NORMALIZED_EXT,
+                            "UNSIGNED_NORMALIZED_EXT"),
+  };
+
+  napi_value ctor_value;
+  nstatus = napi_define_class(env, "WEBGL_color_buffer_float", NAPI_AUTO_LENGTH,
+                              GLExtensionBase::InitStubClass, nullptr,
+                              ARRAY_SIZE(properties), properties, &ctor_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  nstatus = napi_create_reference(env, ctor_value, 1, &constructor_ref_);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  return napi_ok;
+}
+
+/* static */
+napi_status WebGLColorBufferFloatExtension::NewInstance(
+    napi_env env, napi_value* instance,
+    EGLContextWrapper* egl_context_wrapper) {
+  ENSURE_EXTENSION_IS_SUPPORTED
+
+  napi_status nstatus = NewInstanceBase(env, constructor_ref_, instance);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  egl_context_wrapper->glRequestExtensionANGLE("GL_EXT_color_buffer_float");
+  RequestExtensionIfAvailable(egl_context_wrapper, "GL_EXT_float_blend");
+  egl_context_wrapper->RefreshGLExtensions();
+
+  return napi_ok;
+}
+
+//==============================================================================
 // EXTColorBufferHalfFloatExtension
 
 napi_ref EXTColorBufferHalfFloatExtension::constructor_ref_;
@@ -297,10 +355,20 @@ napi_status EXTColorBufferHalfFloatExtension::Register(napi_env env,
                                                        napi_value exports) {
   napi_status nstatus;
 
+  napi_property_descriptor properties[] = {
+      NapiDefineIntProperty(env, GL_RGBA16F_EXT, "RGBA16F_EXT"),
+      NapiDefineIntProperty(env, GL_RGB16F_EXT, "RGB16F_EXT"),
+      NapiDefineIntProperty(env, GL_FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT,
+                            "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT"),
+      NapiDefineIntProperty(env, GL_UNSIGNED_NORMALIZED_EXT,
+                            "UNSIGNED_NORMALIZED_EXT"),
+  };
+
   napi_value ctor_value;
-  nstatus = napi_define_class(env, "EXT_color_buffer_half_float",
-                              NAPI_AUTO_LENGTH, GLExtensionBase::InitStubClass,
-                              nullptr, 0, nullptr, &ctor_value);
+  nstatus =
+      napi_define_class(env, "EXT_color_buffer_half_float", NAPI_AUTO_LENGTH,
+                        GLExtensionBase::InitStubClass, nullptr,
+                        ARRAY_SIZE(properties), properties, &ctor_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
   nstatus = napi_create_reference(env, ctor_value, 1, &constructor_ref_);
@@ -934,8 +1002,10 @@ napi_status WebGLDebugRendererInfoExtension::Register(napi_env env,
   napi_status nstatus;
 
   napi_property_descriptor properties[] = {
-      NapiDefineIntProperty(env, GL_VENDOR, "UNMASKED_VENDOR_WEBGL"),
-      NapiDefineIntProperty(env, GL_RENDERER, "UNMASKED_RENDERER_WEBGL")};
+      NapiDefineIntProperty(env, WEBGL_UNMASKED_VENDOR_WEBGL,
+                            "UNMASKED_VENDOR_WEBGL"),
+      NapiDefineIntProperty(env, WEBGL_UNMASKED_RENDERER_WEBGL,
+                            "UNMASKED_RENDERER_WEBGL")};
 
   napi_value ctor_value;
   nstatus =

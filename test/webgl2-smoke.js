@@ -336,7 +336,6 @@ function testSupportedExtensionsReflectGetExtension(gl) {
 
     const colorBufferFloatConstants = [
       ["RGBA32F_EXT", "RGBA32F"],
-      ["RGB32F_EXT", "RGB32F"],
       [
         "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
         "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE"
@@ -344,17 +343,17 @@ function testSupportedExtensionsReflectGetExtension(gl) {
       ["UNSIGNED_NORMALIZED_EXT", "UNSIGNED_NORMALIZED"]
     ];
     for (const [extensionName, contextName] of colorBufferFloatConstants) {
+      assert.notStrictEqual(
+          webglColorBufferFloat[extensionName], undefined,
+          `${extensionName} should be exposed by WEBGL_color_buffer_float`);
       assert.strictEqual(
-          extColorBufferFloat[extensionName],
           webglColorBufferFloat[extensionName],
-          `${extensionName} should match across color buffer float aliases`);
-      if (webglColorBufferFloat[extensionName] !== undefined &&
-          gl[contextName] !== undefined) {
-        assert.strictEqual(
-            webglColorBufferFloat[extensionName], gl[contextName],
-            `${extensionName} should match ${contextName}`);
-      }
+          gl[contextName],
+          `${extensionName} should match ${contextName}`);
     }
+    assert.strictEqual(
+        extColorBufferFloat.RGBA32F_EXT, undefined,
+        "EXT_color_buffer_float should keep its WebGL2 empty-object shape");
   }
 
   assert.strictEqual(gl.getExtension("NOT_A_WEBGL_EXTENSION"), null);
@@ -657,6 +656,34 @@ function testGetParameterSemantics(gl) {
     assert.strictEqual(
         typeof gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT),
         "number");
+  }
+  const colorBufferHalfFloat = gl.getExtension("EXT_color_buffer_half_float");
+  if (colorBufferHalfFloat) {
+    const colorBufferHalfFloatConstants = [
+      ["RGBA16F_EXT", "RGBA16F"],
+      ["RGB16F_EXT", "RGB16F"],
+      [
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT",
+        "FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE"
+      ],
+      ["UNSIGNED_NORMALIZED_EXT", "UNSIGNED_NORMALIZED"]
+    ];
+    for (const [extensionName, contextName] of colorBufferHalfFloatConstants) {
+      assert.strictEqual(
+          colorBufferHalfFloat[extensionName], gl[contextName],
+          `${extensionName} should match ${contextName}`);
+    }
+  }
+  const debugRendererInfo = gl.getExtension("WEBGL_debug_renderer_info");
+  if (debugRendererInfo) {
+    assert.strictEqual(debugRendererInfo.UNMASKED_VENDOR_WEBGL, 0x9245);
+    assert.strictEqual(debugRendererInfo.UNMASKED_RENDERER_WEBGL, 0x9246);
+    assert.strictEqual(
+        typeof gl.getParameter(debugRendererInfo.UNMASKED_VENDOR_WEBGL),
+        "string");
+    assert.strictEqual(
+        typeof gl.getParameter(debugRendererInfo.UNMASKED_RENDERER_WEBGL),
+        "string");
   }
   const derivatives = gl.getExtension("OES_standard_derivatives");
   if (derivatives) {

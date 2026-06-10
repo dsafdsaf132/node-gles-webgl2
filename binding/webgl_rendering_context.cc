@@ -36,6 +36,8 @@
 
 namespace nodejsgl {
 
+static constexpr GLenum kUnmaskedVendorWebGL = 0x9245;
+static constexpr GLenum kUnmaskedRendererWebGL = 0x9246;
 static constexpr GLenum kMaxClientWaitTimeoutWebGL = 0x9247;
 
 // Basic type to control what byte-width the ArrayLike buffer is for cleanup.
@@ -6294,6 +6296,8 @@ static napi_status NewWEBGLDrawBuffers(napi_env env, napi_value js_this,
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTBlendMinmax, EXTBlendMinmaxExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTColorBufferFloat,
                                     EXTColorBufferFloatExtension)
+DEFINE_EXTENSION_DESCRIPTOR_HELPERS(WebGLColorBufferFloat,
+                                    WebGLColorBufferFloatExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTColorBufferHalfFloat,
                                     EXTColorBufferHalfFloatExtension)
 DEFINE_EXTENSION_DESCRIPTOR_HELPERS(EXTFragDepth, EXTFragDepthExtension)
@@ -6346,8 +6350,8 @@ static const WebGLExtensionDescriptor kKnownWebGLExtensions[] = {
     {"EXT_blend_minmax", SupportsEXTBlendMinmax, NewEXTBlendMinmax},
     {"EXT_color_buffer_float", SupportsEXTColorBufferFloat,
      NewEXTColorBufferFloat},
-    {"WEBGL_color_buffer_float", SupportsEXTColorBufferFloat,
-     NewEXTColorBufferFloat},
+    {"WEBGL_color_buffer_float", SupportsWebGLColorBufferFloat,
+     NewWebGLColorBufferFloat},
     {"EXT_color_buffer_half_float", SupportsEXTColorBufferHalfFloat,
      NewEXTColorBufferHalfFloat},
     {"EXT_frag_depth", SupportsEXTFragDepth, NewEXTFragDepth},
@@ -6396,9 +6400,17 @@ static const WebGLExtensionDescriptor *CanonicalWebGLExtension(
 
 static bool WebGLExtensionDescriptorsAlias(
     const WebGLExtensionDescriptor *lhs, const WebGLExtensionDescriptor *rhs) {
-  return lhs != nullptr && rhs != nullptr &&
-         lhs->is_supported == rhs->is_supported &&
-         lhs->new_instance == rhs->new_instance;
+  if (lhs == nullptr || rhs == nullptr) {
+    return false;
+  }
+  if (lhs->is_supported == rhs->is_supported &&
+      lhs->new_instance == rhs->new_instance) {
+    return true;
+  }
+  return (std::strcmp(lhs->name, "EXT_color_buffer_float") == 0 &&
+          std::strcmp(rhs->name, "WEBGL_color_buffer_float") == 0) ||
+         (std::strcmp(lhs->name, "WEBGL_color_buffer_float") == 0 &&
+          std::strcmp(rhs->name, "EXT_color_buffer_float") == 0);
 }
 
 static bool ExtensionListContainsExtensionOrAlias(
@@ -6775,10 +6787,19 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
       break;
     }
 
+    case kUnmaskedVendorWebGL:
+    case kUnmaskedRendererWebGL:
     case GL_VENDOR:
     case GL_RENDERER:
     case GL_SHADING_LANGUAGE_VERSION: {
-      const GLubyte *str = context->eglContextWrapper_->glGetString(name);
+      GLenum string_name = name;
+      if (name == kUnmaskedVendorWebGL) {
+        string_name = GL_VENDOR;
+      } else if (name == kUnmaskedRendererWebGL) {
+        string_name = GL_RENDERER;
+      }
+      const GLubyte *str =
+          context->eglContextWrapper_->glGetString(string_name);
       if (str) {
         const char *str_c_str = reinterpret_cast<const char *>(str);
         napi_value str_value;

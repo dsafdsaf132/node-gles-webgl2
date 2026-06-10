@@ -84,7 +84,18 @@ export type NodeGlesEXTBlendMinmax = {
 
 export type NodeGlesEXTColorBufferFloat = {};
 
-export type NodeGlesEXTColorBufferHalfFloat = {};
+export type NodeGlesWEBGLColorBufferFloat = {
+  readonly RGBA32F_EXT: number;
+  readonly FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT: number;
+  readonly UNSIGNED_NORMALIZED_EXT: number;
+};
+
+export type NodeGlesEXTColorBufferHalfFloat = {
+  readonly RGBA16F_EXT: number;
+  readonly RGB16F_EXT: number;
+  readonly FRAMEBUFFER_ATTACHMENT_COMPONENT_TYPE_EXT: number;
+  readonly UNSIGNED_NORMALIZED_EXT: number;
+};
 
 export type NodeGlesEXTFragDepth = {};
 
@@ -263,7 +274,7 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
   getExtension(extensionName: "EXT_color_buffer_float"):
     NodeGlesEXTColorBufferFloat | null;
   getExtension(extensionName: "WEBGL_color_buffer_float"):
-    NodeGlesEXTColorBufferFloat | null;
+    NodeGlesWEBGLColorBufferFloat | null;
   getExtension(extensionName: "EXT_color_buffer_half_float"):
     NodeGlesEXTColorBufferHalfFloat | null;
   getExtension(extensionName: "EXT_frag_depth"):
