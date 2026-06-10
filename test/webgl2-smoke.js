@@ -6,12 +6,12 @@ const path = require("path");
 const nodeGles = require("..");
 
 function createContext(options = {}) {
-  return nodeGles.createWebGLRenderingContext({
+  return nodeGles.createWebGLRenderingContext(Object.assign({}, options, {
     width: options.width === undefined ? 16 : options.width,
     height: options.height === undefined ? 16 : options.height,
     majorVersion: options.majorVersion === undefined ? 3 : options.majorVersion,
     minorVersion: options.minorVersion === undefined ? 0 : options.minorVersion
-  });
+  }));
 }
 
 function assertNoError(gl, label) {
@@ -357,6 +357,59 @@ function testSupportedExtensionsReflectGetExtension(gl) {
 
   assert.strictEqual(gl.getExtension("NOT_A_WEBGL_EXTENSION"), null);
   assertNoError(gl, "getExtension browser-compatible names");
+}
+
+function testExtensionCreationOptions() {
+  let gl = createContext({
+    enabledExtensions: []
+  });
+  try {
+    const supported = gl.getSupportedExtensions();
+    assert.deepStrictEqual(supported, []);
+    assert.strictEqual(gl.getExtension("WEBGL_lose_context"), null);
+  } finally {
+    gl.destroy();
+  }
+
+  gl = createContext({
+    enabledExtensions: ["WEBGL_lose_context"]
+  });
+  try {
+    const supported = gl.getSupportedExtensions();
+    assert.deepStrictEqual(supported, ["WEBGL_lose_context"]);
+    assert.notStrictEqual(gl.getExtension("webgl_lose_context"), null);
+    assert.strictEqual(gl.getExtension("WEBGL_debug_renderer_info"), null);
+  } finally {
+    gl.destroy();
+  }
+
+  gl = createContext({
+    disabledExtensions: ["WEBGL_lose_context"]
+  });
+  try {
+    const supported = gl.getSupportedExtensions();
+    assert(!supported.includes("WEBGL_lose_context"));
+    assert.strictEqual(gl.getExtension("WEBGL_lose_context"), null);
+    assert.notStrictEqual(gl.getExtension("WEBGL_debug_renderer_info"), null);
+  } finally {
+    gl.destroy();
+  }
+
+  gl = createContext({
+    enabledExtensions: ["WEBGL_lose_context"],
+    disabledExtensions: ["webgl_lose_context"]
+  });
+  try {
+    const supported = gl.getSupportedExtensions();
+    assert(!supported.includes("WEBGL_lose_context"));
+    assert.strictEqual(gl.getExtension("WEBGL_lose_context"), null);
+  } finally {
+    gl.destroy();
+  }
+
+  assert.throws(
+      () => createContext({enabledExtensions: "WEBGL_lose_context"}),
+      /enabledExtensions must be an array/);
 }
 
 function testUnsupportedExtensionDoesNotWriteStderr() {
@@ -2660,6 +2713,7 @@ const gl = createContext();
 console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
 testSupportedExtensionsReflectGetExtension(gl);
+testExtensionCreationOptions();
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
 testGetParameterSemantics(gl);

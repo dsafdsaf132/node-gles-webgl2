@@ -21,27 +21,36 @@ import {NodeJsGlBinding} from './binding';
 
 const binding = bindings('nodejs_gl_binding') as NodeJsGlBinding;
 
+type WebGLExtensionName = string;
 
 interface ContextArguments {
     width?: number,
     height?: number,
+    webGLCompatibility?: boolean,
     webGLCompability?: boolean,
     majorVersion?: number,
     minorVersion?: number,
+    enabledExtensions?: WebGLExtensionName[],
+    disabledExtensions?: WebGLExtensionName[],
 };
 
 const createWebGLRenderingContext = function(args: ContextArguments = {}) {
     const width =  args.width || 1;
     const height = args.height || 1;
-    const webGLCompability = args.webGLCompability || false;
+    const webGLCompatibility = args.webGLCompatibility === undefined ?
+        args.webGLCompability || false : args.webGLCompatibility;
     const majorVersion =  args.majorVersion || 3;
     const minorVersion =  args.minorVersion || 0;
+    const enabledExtensions = args.enabledExtensions;
+    const disabledExtensions = args.disabledExtensions;
     return binding.createWebGLRenderingContext(
         width,
         height,
         majorVersion,
         minorVersion,
-        webGLCompability,
+        webGLCompatibility,
+        enabledExtensions,
+        disabledExtensions,
     );
 
 

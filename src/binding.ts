@@ -77,10 +77,65 @@ export type NodeGlesWEBGLDrawBuffers = {
   drawBuffersWEBGL(buffers: number[] | Uint32Array): void;
 };
 
+export type NodeGlesEXTBlendMinmax = {
+  readonly MAX_EXT: number;
+  readonly MIN_EXT: number;
+};
+
+export type NodeGlesEXTColorBufferFloat = {};
+
+export type NodeGlesEXTColorBufferHalfFloat = {};
+
+export type NodeGlesEXTFragDepth = {};
+
 export type NodeGlesEXTFloatBlend = {};
+
+export type NodeGlesEXTSRGB = {
+  readonly SRGB_EXT: number;
+  readonly SRGB_ALPHA_EXT: number;
+  readonly SRGB8_ALPHA8_EXT: number;
+  readonly FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT: number;
+};
+
+export type NodeGlesEXTShaderTextureLod = {};
+
+export type NodeGlesEXTTextureFilterAnisotropic = {
+  readonly MAX_TEXTURE_MAX_ANISOTROPY_EXT: number;
+  readonly TEXTURE_MAX_ANISOTROPY_EXT: number;
+};
 
 export type NodeGlesEXTTextureMirrorClampToEdge = {
   readonly MIRROR_CLAMP_TO_EDGE_EXT: number;
+};
+
+export type NodeGlesOESElementIndexUint = {};
+
+export type NodeGlesOESStandardDerivatives = {
+  readonly FRAGMENT_SHADER_DERIVATIVE_HINT_OES: number;
+};
+
+export type NodeGlesOESTextureFloat = {};
+
+export type NodeGlesOESTextureFloatLinear = {};
+
+export type NodeGlesOESTextureHalfFloat = {
+  readonly HALF_FLOAT_OES: number;
+};
+
+export type NodeGlesOESTextureHalfFloatLinear = {};
+
+export type NodeGlesWEBGLDebugRendererInfo = {
+  readonly UNMASKED_VENDOR_WEBGL: number;
+  readonly UNMASKED_RENDERER_WEBGL: number;
+};
+
+export type NodeGlesWEBGLDepthTexture = {
+  readonly UNSIGNED_INT_24_8_WEBGL: number;
+};
+
+export type NodeGlesWEBGLLoseContext = {
+  loseContext(): void;
+  restoreContext(): void;
 };
 
 export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
@@ -189,14 +244,48 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
     srcOffsetOrOffset?: number, srcLengthOverride?: number): void;
   getExtension(extensionName: "ANGLE_instanced_arrays"):
     NodeGlesANGLEInstancedArrays | null;
+  getExtension(extensionName: "EXT_blend_minmax"):
+    NodeGlesEXTBlendMinmax | null;
+  getExtension(extensionName: "EXT_color_buffer_float"):
+    NodeGlesEXTColorBufferFloat | null;
+  getExtension(extensionName: "WEBGL_color_buffer_float"):
+    NodeGlesEXTColorBufferFloat | null;
+  getExtension(extensionName: "EXT_color_buffer_half_float"):
+    NodeGlesEXTColorBufferHalfFloat | null;
+  getExtension(extensionName: "EXT_frag_depth"):
+    NodeGlesEXTFragDepth | null;
   getExtension(extensionName: "EXT_float_blend"):
     NodeGlesEXTFloatBlend | null;
+  getExtension(extensionName: "EXT_sRGB"):
+    NodeGlesEXTSRGB | null;
+  getExtension(extensionName: "EXT_shader_texture_lod"):
+    NodeGlesEXTShaderTextureLod | null;
+  getExtension(extensionName: "EXT_texture_filter_anisotropic"):
+    NodeGlesEXTTextureFilterAnisotropic | null;
   getExtension(extensionName: "EXT_texture_mirror_clamp_to_edge"):
     NodeGlesEXTTextureMirrorClampToEdge | null;
+  getExtension(extensionName: "OES_element_index_uint"):
+    NodeGlesOESElementIndexUint | null;
+  getExtension(extensionName: "OES_standard_derivatives"):
+    NodeGlesOESStandardDerivatives | null;
+  getExtension(extensionName: "OES_texture_float"):
+    NodeGlesOESTextureFloat | null;
+  getExtension(extensionName: "OES_texture_float_linear"):
+    NodeGlesOESTextureFloatLinear | null;
+  getExtension(extensionName: "OES_texture_half_float"):
+    NodeGlesOESTextureHalfFloat | null;
+  getExtension(extensionName: "OES_texture_half_float_linear"):
+    NodeGlesOESTextureHalfFloatLinear | null;
   getExtension(extensionName: "OES_vertex_array_object"):
     NodeGlesOESVertexArrayObject | null;
+  getExtension(extensionName: "WEBGL_debug_renderer_info"):
+    NodeGlesWEBGLDebugRendererInfo | null;
+  getExtension(extensionName: "WEBGL_depth_texture"):
+    NodeGlesWEBGLDepthTexture | null;
   getExtension(extensionName: "WEBGL_draw_buffers"):
     NodeGlesWEBGLDrawBuffers | null;
+  getExtension(extensionName: "WEBGL_lose_context"):
+    NodeGlesWEBGLLoseContext | null;
 };
 
 export interface NodeJsGlBinding {
@@ -205,6 +294,8 @@ export interface NodeJsGlBinding {
     height: number,
     client_major_es_version: number,
     client_minor_es_version: number,
-    webgl_compatbility: boolean
+    webgl_compatibility: boolean,
+    enabled_extensions?: string[],
+    disabled_extensions?: string[]
     ): WebGLRenderingContext | NodeGlesWebGL2RenderingContext;
 }

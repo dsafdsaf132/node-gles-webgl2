@@ -42,6 +42,9 @@ struct GLContextOptions {
   uint32_t client_minor_es_version = 0;
   uint32_t width = 1;
   uint32_t height = 1;
+  bool has_enabled_extensions_filter = false;
+  std::vector<std::string> enabled_extensions;
+  std::vector<std::string> disabled_extensions;
 };
 
 // Provides lookup of EGL/GL extensions.

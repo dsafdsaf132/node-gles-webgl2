@@ -23,6 +23,7 @@
 #include <atomic>
 #include <deque>
 #include <string>
+#include <vector>
 
 #include "egl_context_wrapper.h"
 
@@ -58,6 +59,7 @@ class WebGLRenderingContext {
   WebGLRenderingContext(napi_env env, GLContextOptions opts);
   ~WebGLRenderingContext();
   void DestroyNativeResources();
+  bool IsExtensionAllowed(const char* extension_name) const;
 
   static napi_value InitInternal(napi_env env, napi_callback_info info);
   static void Cleanup(napi_env env, void* native, void* hint);
@@ -346,6 +348,9 @@ class WebGLRenderingContext {
   PixelStoreState pixel_store_state_;
   bool supports_webgl2_pixel_store_;
   std::deque<GLenum> pending_errors_;
+  bool has_enabled_extensions_filter_;
+  std::vector<std::string> enabled_extensions_;
+  std::vector<std::string> disabled_extensions_;
 
   std::atomic<size_t> alloc_count_;
 };

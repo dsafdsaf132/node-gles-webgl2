@@ -89,6 +89,17 @@ const gl = nodeGles.createWebGLRenderingContext({
 console.log(gl.getParameter(gl.VERSION));
 ```
 
+### Context Options
+
+- `width` / `height`: drawing buffer size, default `1`.
+- `majorVersion` / `minorVersion`: requested OpenGL ES version, default `3.0`.
+- `webGLCompatibility`: requests ANGLE WebGL compatibility mode. The legacy
+  misspelled `webGLCompability` option is still accepted as an alias.
+- `enabledExtensions`: optional WebGL extension allowlist. When set, only listed
+  supported extensions are exposed.
+- `disabledExtensions`: optional WebGL extension blocklist. This takes
+  precedence over `enabledExtensions`.
+
 ## Context Lifecycle
 
 For batch rendering, call `gl.destroy()` or `gl.dispose()` after the final
