@@ -6386,6 +6386,28 @@ static const WebGLExtensionDescriptor *CanonicalWebGLExtension(
   return nullptr;
 }
 
+static bool WebGLExtensionDescriptorsAlias(
+    const WebGLExtensionDescriptor *lhs, const WebGLExtensionDescriptor *rhs) {
+  return lhs != nullptr && rhs != nullptr &&
+         lhs->is_supported == rhs->is_supported &&
+         lhs->new_instance == rhs->new_instance;
+}
+
+static bool ExtensionListContainsExtensionOrAlias(
+    const std::vector<std::string> &extensions, const char *extension) {
+  const WebGLExtensionDescriptor *target = CanonicalWebGLExtension(extension);
+  for (const std::string &entry : extensions) {
+    if (ExtensionNameEqualsIgnoringCase(entry, extension)) {
+      return true;
+    }
+    const WebGLExtensionDescriptor *listed = CanonicalWebGLExtension(entry);
+    if (WebGLExtensionDescriptorsAlias(listed, target)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static void AddUniqueExtension(std::vector<std::string> *extensions,
                                const char *extension) {
   if (extension == nullptr || extension[0] == '\0') {
@@ -6409,7 +6431,8 @@ bool WebGLRenderingContext::IsExtensionAllowed(
   if (has_enabled_extensions_filter_ && enabled_extensions_.empty()) {
     return false;
   }
-  return !ExtensionListContains(disabled_extensions_, extension_name);
+  return !ExtensionListContainsExtensionOrAlias(disabled_extensions_,
+                                               extension_name);
 }
 
 /* static */

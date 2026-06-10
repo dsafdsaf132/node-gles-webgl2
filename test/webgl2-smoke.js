@@ -360,6 +360,13 @@ function testSupportedExtensionsReflectGetExtension(gl) {
 }
 
 function testExtensionCreationOptions() {
+  const defaultGl = createContext();
+  const defaultExtensions = defaultGl.getSupportedExtensions();
+  const supportsColorBufferFloatAliases =
+      defaultExtensions.includes("EXT_color_buffer_float") &&
+      defaultExtensions.includes("WEBGL_color_buffer_float");
+  defaultGl.destroy();
+
   let gl = createContext({
     enabledExtensions: []
   });
@@ -410,6 +417,21 @@ function testExtensionCreationOptions() {
   assert.throws(
       () => createContext({enabledExtensions: "WEBGL_lose_context"}),
       /enabledExtensions must be an array/);
+
+  if (supportsColorBufferFloatAliases) {
+    gl = createContext({
+      disabledExtensions: ["EXT_color_buffer_float"]
+    });
+    try {
+      const supported = gl.getSupportedExtensions();
+      assert(!supported.includes("EXT_color_buffer_float"));
+      assert(!supported.includes("WEBGL_color_buffer_float"));
+      assert.strictEqual(gl.getExtension("EXT_color_buffer_float"), null);
+      assert.strictEqual(gl.getExtension("WEBGL_color_buffer_float"), null);
+    } finally {
+      gl.destroy();
+    }
+  }
 }
 
 function testUnsupportedExtensionDoesNotWriteStderr() {
