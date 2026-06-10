@@ -520,12 +520,7 @@ function testGetParameterSemantics(gl) {
   assert.strictEqual(gl.getError(), gl.NO_ERROR);
 }
 
-function testEXTFloatBlend(gl) {
-  if (!gl.getExtension("EXT_float_blend") ||
-      !gl.getExtension("EXT_color_buffer_float")) {
-    return;
-  }
-
+function assertEXTFloatBlendDraw(gl, label) {
   const previousViewport = gl.getParameter(gl.VIEWPORT);
   const wasBlendEnabled = gl.isEnabled(gl.BLEND);
   const previousBlendSrcRgb = gl.getParameter(gl.BLEND_SRC_RGB);
@@ -585,7 +580,7 @@ void main() {
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, readback);
   assertArrayNear(
       Array.from(readback), [0.5, 1, 1.5, 1],
-      "EXT_float_blend RGBA32F additive blending", 1e-6);
+      `${label} implicit EXT_float_blend additive blending`, 1e-6);
 
   if (!wasBlendEnabled) {
     gl.disable(gl.BLEND);
@@ -608,7 +603,23 @@ void main() {
   gl.deleteFramebuffer(framebuffer);
   gl.deleteTexture(texture);
   gl.deleteProgram(program);
-  assertNoError(gl, "EXT_float_blend RGBA32F additive blending");
+  assertNoError(gl, `${label} implicit EXT_float_blend additive blending`);
+}
+
+function testEXTFloatBlendImplicitEnable() {
+  for (const triggerName of [
+    "EXT_color_buffer_float",
+    "WEBGL_color_buffer_float",
+    "OES_texture_float"
+  ]) {
+    const blendGl = createContext({width: 1, height: 1});
+    if (!blendGl.getExtension(triggerName)) {
+      blendGl.destroy();
+      continue;
+    }
+    assertEXTFloatBlendDraw(blendGl, triggerName);
+    blendGl.destroy();
+  }
 }
 
 function testBufferCopyAndReadback(gl) {
@@ -2652,7 +2663,7 @@ testSupportedExtensionsReflectGetExtension(gl);
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
 testGetParameterSemantics(gl);
-testEXTFloatBlend(gl);
+testEXTFloatBlendImplicitEnable();
 testBufferCopyAndReadback(gl);
 testSamplerObjects(gl);
 testSyncObjects(gl);

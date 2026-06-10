@@ -41,6 +41,15 @@ namespace nodejsgl {
          egl_context_wrapper->gl_extensions->HasExtension(ext_name);
 #endif
 
+static void RequestExtensionIfAvailable(EGLContextWrapper* egl_context_wrapper,
+                                        const char* ext_name) {
+  if (egl_context_wrapper->angle_requestable_extensions->HasExtension(
+          ext_name) ||
+      egl_context_wrapper->gl_extensions->HasExtension(ext_name)) {
+    egl_context_wrapper->glRequestExtensionANGLE(ext_name);
+  }
+}
+
 //==============================================================================
 // GLExtensionBase
 
@@ -210,6 +219,7 @@ napi_status EXTColorBufferFloatExtension::NewInstance(
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
   egl_context_wrapper->glRequestExtensionANGLE("GL_EXT_color_buffer_float");
+  RequestExtensionIfAvailable(egl_context_wrapper, "GL_EXT_float_blend");
   egl_context_wrapper->RefreshGLExtensions();
 
   return napi_ok;
@@ -698,6 +708,7 @@ napi_status OESTextureFloatExtension::NewInstance(
       "GL_CHROMIUM_color_buffer_float_rgba");
   egl_context_wrapper->glRequestExtensionANGLE(
       "GL_CHROMIUM_color_buffer_float_rgb");
+  RequestExtensionIfAvailable(egl_context_wrapper, "GL_EXT_float_blend");
   egl_context_wrapper->RefreshGLExtensions();
 
   return napi_ok;
