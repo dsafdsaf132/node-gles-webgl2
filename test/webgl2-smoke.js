@@ -88,6 +88,13 @@ void main() {
   assert.strictEqual(gl.getProgramInfoLog(program), "");
 }
 
+function testInvalidProgramLinkErrors(gl) {
+  gl.linkProgram(0);
+  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
+  gl.linkProgram(999999);
+  assert.strictEqual(gl.getError(), gl.INVALID_VALUE);
+}
+
 function assertRedPixel(gl, x, y, label) {
   const pixel = new Uint8Array(4);
   gl.readPixels(x, y, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
@@ -1258,6 +1265,7 @@ void main() {
 precision highp float;
 uniform uint u_scalar;
 uniform uvec4 u_vector;
+uniform uint u_unused;
 out vec4 out_color;
 void main() {
   bool ok = u_scalar == 7u && all(equal(u_vector, uvec4(1u, 2u, 3u, 4u)));
@@ -1276,6 +1284,10 @@ void main() {
   assert.strictEqual(typeof scalarLocation, "object");
   assert.strictEqual(Boolean(scalarLocation), true);
   assert.strictEqual(gl.getUniformLocation(program, "u_missing"), null);
+  const unusedLocation = gl.getUniformLocation(program, "u_unused");
+  assert.strictEqual(unusedLocation, null);
+  gl.uniform1ui(unusedLocation, 123);
+  assertNoError(gl, "inactive uniform location no-op");
   gl.uniform1ui(scalarLocation, 7);
   gl.uniform4uiv(vectorLocation, new Uint32Array([1, 2, 3, 4]));
   assert.strictEqual(gl.getUniform(program, scalarLocation), 7);
@@ -1284,6 +1296,116 @@ void main() {
   gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
   assertPixelNear(pixel, [0, 255, 0, 255], "unsigned integer uniforms");
   assertNoError(gl, "unsigned integer uniforms");
+  gl.useProgram(null);
+  gl.uniform1ui(unusedLocation, 123);
+  assertNoError(gl, "inactive uniform location no-op without current program");
+}
+
+function testUniformLocationProgramValidation(gl) {
+  const vertexSource = `#version 300 es
+void main() {
+  vec2 positions[3] = vec2[3](
+      vec2(-1.0, -1.0),
+      vec2(3.0, -1.0),
+      vec2(-1.0, 3.0));
+  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+}
+`;
+  const fragmentSource = `#version 300 es
+precision highp float;
+uniform vec4 u_color;
+out vec4 out_color;
+void main() {
+  out_color = u_color;
+}
+`;
+  const firstProgram =
+      createProgramFromSources(gl, vertexSource, fragmentSource);
+  const secondProgram =
+      createProgramFromSources(gl, vertexSource, fragmentSource);
+  const firstLocation = gl.getUniformLocation(firstProgram, "u_color");
+  const secondLocation = gl.getUniformLocation(secondProgram, "u_color");
+
+  gl.useProgram(secondProgram);
+  gl.getError();
+  gl.uniform4f(firstLocation, 0, 1, 0, 1);
+  assert.strictEqual(
+      gl.getError(), gl.INVALID_OPERATION,
+      "foreign uniform location should be rejected");
+  assert.strictEqual(gl.getUniform(secondProgram, firstLocation), null);
+  assert.strictEqual(
+      gl.getError(), gl.INVALID_OPERATION,
+      "getUniform should reject a location from another program");
+
+  gl.uniform4f(secondLocation, 0, 1, 0, 1);
+  assertNoError(gl, "valid uniform location after rejected location");
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  assertPixelNear(pixel, [0, 255, 0, 255],
+                  "valid uniform after rejected location");
+
+  gl.linkProgram(secondProgram);
+  assert.strictEqual(
+      gl.getProgramParameter(secondProgram, gl.LINK_STATUS), true,
+      gl.getProgramInfoLog(secondProgram));
+  gl.useProgram(secondProgram);
+  gl.getError();
+  gl.uniform4f(secondLocation, 1, 0, 0, 1);
+  assert.strictEqual(
+      gl.getError(), gl.INVALID_OPERATION,
+      "stale uniform location should be rejected after relink");
+  const relinkedLocation = gl.getUniformLocation(secondProgram, "u_color");
+  gl.uniform4f(relinkedLocation, 0, 0, 1, 1);
+  assertNoError(gl, "valid uniform location after relink");
+
+  gl.deleteProgram(secondProgram);
+  gl.useProgram(null);
+  gl.getError();
+  assert.strictEqual(gl.getUniform(secondProgram, relinkedLocation), null);
+  assert.strictEqual(
+      gl.getError(), gl.INVALID_OPERATION,
+      "deleted program uniform location should be rejected after unbind");
+}
+
+function testUniformLocationContextValidation(gl) {
+  const otherGl = createContext();
+  const vertexSource = `#version 300 es
+void main() {
+  vec2 positions[3] = vec2[3](
+      vec2(-1.0, -1.0),
+      vec2(3.0, -1.0),
+      vec2(-1.0, 3.0));
+  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+}
+`;
+  const fragmentSource = `#version 300 es
+precision highp float;
+uniform vec4 u_color;
+out vec4 out_color;
+void main() {
+  out_color = u_color;
+}
+`;
+  const program = createProgramFromSources(gl, vertexSource, fragmentSource);
+  const otherProgram =
+      createProgramFromSources(otherGl, vertexSource, fragmentSource);
+  const location = gl.getUniformLocation(program, "u_color");
+  const otherLocation = otherGl.getUniformLocation(otherProgram, "u_color");
+
+  otherGl.useProgram(otherProgram);
+  otherGl.getError();
+  otherGl.uniform4f(location, 1, 0, 0, 1);
+  assert.strictEqual(
+      otherGl.getError(), otherGl.INVALID_OPERATION,
+      "uniform location from another context should be rejected");
+  assert.strictEqual(otherGl.getUniform(otherProgram, location), null);
+  assert.strictEqual(
+      otherGl.getError(), otherGl.INVALID_OPERATION,
+      "getUniform should reject a location from another context");
+
+  otherGl.uniform4f(otherLocation, 0, 1, 0, 1);
+  assertNoError(otherGl, "valid uniform location after cross-context reject");
 }
 
 function testNonSquareUniformMatrices(gl) {
@@ -3098,6 +3220,7 @@ testCompressedTextureS3TC(gl);
 testExtensionCreationOptions();
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
+testInvalidProgramLinkErrors(gl);
 testGetParameterSemantics(gl);
 testExposedExtensionSemantics(gl);
 testEXTFloatBlendImplicitEnable();
@@ -3109,6 +3232,8 @@ testPixelBufferObjectNumericOffsets(gl);
 testMultisampleFramebufferOperations(gl);
 testTexStorage2DAndMultiPixelReadback(gl);
 testUnsignedIntegerUniforms(gl);
+testUniformLocationProgramValidation(gl);
+testUniformLocationContextValidation(gl);
 testNonSquareUniformMatrices(gl);
 testUniformBufferObjects(gl);
 testQueryObjects(gl);
