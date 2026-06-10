@@ -308,6 +308,51 @@ napi_status EXTFragDepthExtension::NewInstance(
 }
 
 //==============================================================================
+// EXTFloatBlendExtension
+
+napi_ref EXTFloatBlendExtension::constructor_ref_;
+
+EXTFloatBlendExtension::EXTFloatBlendExtension(napi_env env)
+    : GLExtensionBase(env) {}
+
+/* static */
+bool EXTFloatBlendExtension::IsSupported(
+    EGLContextWrapper* egl_context_wrapper) {
+  IS_EXTENSION_NAME_AVAILABLE("GL_EXT_float_blend");
+}
+
+/* static */
+napi_status EXTFloatBlendExtension::Register(napi_env env, napi_value exports) {
+  napi_status nstatus;
+
+  napi_value ctor_value;
+  nstatus = napi_define_class(env, "EXT_float_blend", NAPI_AUTO_LENGTH,
+                              GLExtensionBase::InitStubClass, nullptr, 0,
+                              nullptr, &ctor_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  nstatus = napi_create_reference(env, ctor_value, 1, &constructor_ref_);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  return napi_ok;
+}
+
+/* static */
+napi_status EXTFloatBlendExtension::NewInstance(
+    napi_env env, napi_value* instance,
+    EGLContextWrapper* egl_context_wrapper) {
+  ENSURE_EXTENSION_IS_SUPPORTED
+
+  napi_status nstatus = NewInstanceBase(env, constructor_ref_, instance);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  egl_context_wrapper->glRequestExtensionANGLE("GL_EXT_float_blend");
+  egl_context_wrapper->RefreshGLExtensions();
+
+  return napi_ok;
+}
+
+//==============================================================================
 // EXTShaderTextureLodExtension
 
 napi_ref EXTShaderTextureLodExtension::constructor_ref_;
@@ -455,6 +500,58 @@ napi_status EXTTextureFilterAnisotropicExtension::NewInstance(
 
   egl_context_wrapper->glRequestExtensionANGLE(
       "GL_EXT_texture_filter_anisotropic");
+  egl_context_wrapper->RefreshGLExtensions();
+
+  return napi_ok;
+}
+
+//==============================================================================
+// EXTTextureMirrorClampToEdgeExtension
+
+napi_ref EXTTextureMirrorClampToEdgeExtension::constructor_ref_;
+
+EXTTextureMirrorClampToEdgeExtension::EXTTextureMirrorClampToEdgeExtension(
+    napi_env env)
+    : GLExtensionBase(env) {}
+
+/* static */
+bool EXTTextureMirrorClampToEdgeExtension::IsSupported(
+    EGLContextWrapper* egl_context_wrapper) {
+  IS_EXTENSION_NAME_AVAILABLE("GL_EXT_texture_mirror_clamp_to_edge");
+}
+
+/* static */
+napi_status EXTTextureMirrorClampToEdgeExtension::Register(napi_env env,
+                                                           napi_value exports) {
+  napi_status nstatus;
+
+  napi_property_descriptor properties[] = {NapiDefineIntProperty(
+      env, GL_MIRROR_CLAMP_TO_EDGE_EXT, "MIRROR_CLAMP_TO_EDGE_EXT")};
+
+  napi_value ctor_value;
+  nstatus = napi_define_class(env, "EXT_texture_mirror_clamp_to_edge",
+                              NAPI_AUTO_LENGTH, GLExtensionBase::InitStubClass,
+                              nullptr, ARRAY_SIZE(properties), properties,
+                              &ctor_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  nstatus = napi_create_reference(env, ctor_value, 1, &constructor_ref_);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  return napi_ok;
+}
+
+/* static */
+napi_status EXTTextureMirrorClampToEdgeExtension::NewInstance(
+    napi_env env, napi_value* instance,
+    EGLContextWrapper* egl_context_wrapper) {
+  ENSURE_EXTENSION_IS_SUPPORTED
+
+  napi_status nstatus = NewInstanceBase(env, constructor_ref_, instance);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  egl_context_wrapper->glRequestExtensionANGLE(
+      "GL_EXT_texture_mirror_clamp_to_edge");
   egl_context_wrapper->RefreshGLExtensions();
 
   return napi_ok;

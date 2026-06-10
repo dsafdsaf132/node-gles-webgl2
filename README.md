@@ -48,9 +48,11 @@ backend.
 | `EXT_color_buffer_float` / `WEBGL_color_buffer_float` | Exposed |
 | `EXT_color_buffer_half_float` | Exposed |
 | `EXT_frag_depth` | Exposed |
+| `EXT_float_blend` | Exposed |
 | `EXT_sRGB` | Exposed |
 | `EXT_shader_texture_lod` | Exposed |
 | `EXT_texture_filter_anisotropic` | Exposed |
+| `EXT_texture_mirror_clamp_to_edge` | Exposed |
 | `OES_element_index_uint` | Exposed |
 | `OES_standard_derivatives` | Exposed |
 | `OES_texture_float` / `OES_texture_float_linear` | Exposed |

@@ -290,9 +290,11 @@ function testSupportedExtensionsReflectGetExtension(gl) {
     "WEBGL_color_buffer_float",
     "EXT_color_buffer_half_float",
     "EXT_frag_depth",
+    "EXT_float_blend",
     "EXT_sRGB",
     "EXT_shader_texture_lod",
     "EXT_texture_filter_anisotropic",
+    "EXT_texture_mirror_clamp_to_edge",
     "OES_element_index_uint",
     "OES_standard_derivatives",
     "OES_texture_float",
@@ -499,11 +501,114 @@ function testGetParameterSemantics(gl) {
     assert(Number.isInteger(
         gl.getParameter(derivatives.FRAGMENT_SHADER_DERIVATIVE_HINT_OES)));
   }
+  const mirrorClamp =
+      gl.getExtension("EXT_texture_mirror_clamp_to_edge");
+  if (mirrorClamp) {
+    assert.strictEqual(mirrorClamp.MIRROR_CLAMP_TO_EDGE_EXT, 0x8743);
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameteri(
+        gl.TEXTURE_2D, gl.TEXTURE_WRAP_S,
+        mirrorClamp.MIRROR_CLAMP_TO_EDGE_EXT);
+    gl.deleteTexture(texture);
+    assertNoError(gl, "EXT_texture_mirror_clamp_to_edge wrap mode");
+  }
   assert.strictEqual(gl.getError(), gl.NO_ERROR);
 
   assert.strictEqual(gl.getParameter(0xdeadbeef), null);
   assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
   assert.strictEqual(gl.getError(), gl.NO_ERROR);
+}
+
+function testEXTFloatBlend(gl) {
+  if (!gl.getExtension("EXT_float_blend") ||
+      !gl.getExtension("EXT_color_buffer_float")) {
+    return;
+  }
+
+  const previousViewport = gl.getParameter(gl.VIEWPORT);
+  const wasBlendEnabled = gl.isEnabled(gl.BLEND);
+  const previousBlendSrcRgb = gl.getParameter(gl.BLEND_SRC_RGB);
+  const previousBlendDstRgb = gl.getParameter(gl.BLEND_DST_RGB);
+  const previousBlendSrcAlpha = gl.getParameter(gl.BLEND_SRC_ALPHA);
+  const previousBlendDstAlpha = gl.getParameter(gl.BLEND_DST_ALPHA);
+  const previousClearColor = gl.getParameter(gl.COLOR_CLEAR_VALUE);
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texImage2D(
+      gl.TEXTURE_2D, 0, gl.RGBA32F, 1, 1, 0, gl.RGBA, gl.FLOAT, null);
+
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+  gl.drawBuffers([gl.COLOR_ATTACHMENT0]);
+
+  const program = createProgramFromSources(gl, `#version 300 es
+in vec2 a_position;
+void main() {
+  gl_Position = vec4(a_position, 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+out vec4 out_color;
+void main() {
+  out_color = vec4(0.25, 0.5, 0.75, 0.5);
+}
+`);
+  const vao = gl.createVertexArray();
+  const positionBuffer = gl.createBuffer();
+  gl.bindVertexArray(vao);
+  gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+  gl.bufferData(
+      gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]),
+      gl.STATIC_DRAW);
+  const positionLocation = gl.getAttribLocation(program, "a_position");
+  assert(positionLocation >= 0, "EXT_float_blend position attribute not found");
+  gl.vertexAttribPointer(positionLocation, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(positionLocation);
+
+  gl.viewport(0, 0, 1, 1);
+  gl.clearColor(0, 0, 0, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.enable(gl.BLEND);
+  gl.blendFunc(gl.ONE, gl.ONE);
+  gl.useProgram(program);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+
+  const readback = new Float32Array(4);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.FLOAT, readback);
+  assertArrayNear(
+      Array.from(readback), [0.5, 1, 1.5, 1],
+      "EXT_float_blend RGBA32F additive blending", 1e-6);
+
+  if (!wasBlendEnabled) {
+    gl.disable(gl.BLEND);
+  }
+  gl.blendFuncSeparate(
+      previousBlendSrcRgb, previousBlendDstRgb,
+      previousBlendSrcAlpha, previousBlendDstAlpha);
+  gl.viewport(
+      previousViewport[0], previousViewport[1],
+      previousViewport[2], previousViewport[3]);
+  gl.clearColor(
+      previousClearColor[0], previousClearColor[1],
+      previousClearColor[2], previousClearColor[3]);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindVertexArray(null);
+  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.deleteBuffer(positionBuffer);
+  gl.deleteVertexArray(vao);
+  gl.deleteFramebuffer(framebuffer);
+  gl.deleteTexture(texture);
+  gl.deleteProgram(program);
+  assertNoError(gl, "EXT_float_blend RGBA32F additive blending");
 }
 
 function testBufferCopyAndReadback(gl) {
@@ -2547,6 +2652,7 @@ testSupportedExtensionsReflectGetExtension(gl);
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
 testGetParameterSemantics(gl);
+testEXTFloatBlend(gl);
 testBufferCopyAndReadback(gl);
 testSamplerObjects(gl);
 testSyncObjects(gl);

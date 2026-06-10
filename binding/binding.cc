@@ -39,9 +39,11 @@ static napi_value InitBinding(napi_env env, napi_value exports) {
   EXTColorBufferFloatExtension::Register(env, exports);
   EXTColorBufferHalfFloatExtension::Register(env, exports);
   EXTFragDepthExtension::Register(env, exports);
+  EXTFloatBlendExtension::Register(env, exports);
   EXTShaderTextureLodExtension::Register(env, exports);
   EXTSRGBExtension::Register(env, exports);
   EXTTextureFilterAnisotropicExtension::Register(env, exports);
+  EXTTextureMirrorClampToEdgeExtension::Register(env, exports);
   OESElementIndexUintExtension::Register(env, exports);
   OESStandardDerivativesExtension::Register(env, exports);
   OESTextureFloatExtension::Register(env, exports);
