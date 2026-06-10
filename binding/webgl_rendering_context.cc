@@ -23,6 +23,7 @@
 #include <cstring>
 #include <iostream>
 #include <limits>
+#include <mutex>
 #include <new>
 #include <string>
 #include <vector>
@@ -102,6 +103,130 @@ class ArrayLikeBuffer {
     }
   }
 };
+
+struct WebGLUniformLocationHandle {
+  GLint location;
+  WebGLUniformLocationHandle *previous;
+  WebGLUniformLocationHandle *next;
+};
+
+static std::mutex uniform_location_handle_mutex;
+static WebGLUniformLocationHandle *uniform_location_handle_head = nullptr;
+
+static void RegisterWebGLUniformLocationHandle(
+    WebGLUniformLocationHandle *handle) {
+  std::lock_guard<std::mutex> lock(uniform_location_handle_mutex);
+  handle->previous = nullptr;
+  handle->next = uniform_location_handle_head;
+  if (uniform_location_handle_head != nullptr) {
+    uniform_location_handle_head->previous = handle;
+  }
+  uniform_location_handle_head = handle;
+}
+
+static void UnregisterWebGLUniformLocationHandle(
+    WebGLUniformLocationHandle *handle) {
+  std::lock_guard<std::mutex> lock(uniform_location_handle_mutex);
+  if (handle->previous != nullptr) {
+    handle->previous->next = handle->next;
+  } else if (uniform_location_handle_head == handle) {
+    uniform_location_handle_head = handle->next;
+  }
+  if (handle->next != nullptr) {
+    handle->next->previous = handle->previous;
+  }
+  handle->previous = nullptr;
+  handle->next = nullptr;
+}
+
+static bool IsRegisteredWebGLUniformLocationHandle(
+    WebGLUniformLocationHandle *handle) {
+  std::lock_guard<std::mutex> lock(uniform_location_handle_mutex);
+  for (WebGLUniformLocationHandle *current = uniform_location_handle_head;
+       current != nullptr; current = current->next) {
+    if (current == handle) {
+      return true;
+    }
+  }
+  return false;
+}
+
+static void CleanupWebGLUniformLocation(napi_env env, void *native,
+                                        void *hint) {
+  WebGLUniformLocationHandle *handle =
+      static_cast<WebGLUniformLocationHandle *>(native);
+  if (handle != nullptr) {
+    UnregisterWebGLUniformLocationHandle(handle);
+    delete handle;
+  }
+}
+
+static napi_status WrapWebGLUniformLocation(napi_env env, GLint location,
+                                            napi_value *wrapped_value) {
+  napi_status nstatus = napi_create_object(env, wrapped_value);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  WebGLUniformLocationHandle *handle =
+      new (std::nothrow) WebGLUniformLocationHandle{location, nullptr, nullptr};
+  if (handle == nullptr) {
+    NAPI_THROW_ERROR(env, "Could not allocate WebGLUniformLocation");
+    return napi_generic_failure;
+  }
+
+  nstatus = napi_wrap(env, *wrapped_value, handle, CleanupWebGLUniformLocation,
+                      nullptr, nullptr);
+  if (nstatus != napi_ok) {
+    delete handle;
+  }
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  RegisterWebGLUniformLocationHandle(handle);
+  return napi_ok;
+}
+
+static napi_status GetWebGLUniformLocationHandle(
+    napi_env env, napi_value value, WebGLUniformLocationHandle **handle) {
+  void *wrapped_handle = nullptr;
+  napi_status nstatus = napi_unwrap(env, value, &wrapped_handle);
+  if (nstatus != napi_ok || wrapped_handle == nullptr) {
+    NAPI_THROW_ERROR(env, "location must be a WebGLUniformLocation object");
+    return napi_invalid_arg;
+  }
+
+  WebGLUniformLocationHandle *candidate =
+      static_cast<WebGLUniformLocationHandle *>(wrapped_handle);
+  if (!IsRegisteredWebGLUniformLocationHandle(candidate)) {
+    NAPI_THROW_ERROR(env, "location must be a WebGLUniformLocation object");
+    return napi_invalid_arg;
+  }
+
+  *handle = candidate;
+  return napi_ok;
+}
+
+static napi_status GetUniformLocationParam(napi_env env, napi_value value,
+                                           GLint *location) {
+  napi_valuetype value_type;
+  napi_status nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (value_type == napi_null || value_type == napi_undefined) {
+    *location = -1;
+    return napi_ok;
+  }
+  if (value_type == napi_number) {
+    nstatus = napi_get_value_int32(env, value, location);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+    return napi_ok;
+  }
+
+  ENSURE_VALUE_IS_OBJECT_RETVAL(env, value, napi_invalid_arg);
+  WebGLUniformLocationHandle *handle = nullptr;
+  nstatus = GetWebGLUniformLocationHandle(env, value, &handle);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  *location = handle->location;
+  return napi_ok;
+}
 
 bool WebGLRenderingContext::CheckForErrors() {
   GLenum error;
@@ -312,6 +437,67 @@ static napi_status GetContextDoubleParams(napi_env env, napi_callback_info info,
     }
   }
 
+  return napi_ok;
+}
+
+static napi_status GetUniformNumberValue(napi_env env, napi_value value,
+                                         double *result) {
+  return napi_get_value_double(env, value, result);
+}
+
+static napi_status GetUniformNumberValue(napi_env env, napi_value value,
+                                         uint32_t *result) {
+  return napi_get_value_uint32(env, value, result);
+}
+
+static napi_status GetUniformNumberValue(napi_env env, napi_value value,
+                                         int32_t *result) {
+  return napi_get_value_int32(env, value, result);
+}
+
+template <typename T>
+static napi_status GetUniformValueParam(napi_env env, napi_value value,
+                                        T *result) {
+  napi_valuetype value_type;
+  napi_status nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (value_type == napi_null || value_type == napi_undefined) {
+    *result = 0;
+    return napi_ok;
+  }
+  ENSURE_VALUE_IS_NUMBER_RETVAL(env, value, napi_invalid_arg);
+
+  nstatus = GetUniformNumberValue(env, value, result);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  return napi_ok;
+}
+
+template <typename T>
+static napi_status GetContextUniformParams(napi_env env,
+                                           napi_callback_info info,
+                                           WebGLRenderingContext **context,
+                                           size_t value_count, GLint *location,
+                                           T *values) {
+  napi_status nstatus;
+
+  size_t argc = value_count + 1;
+  std::vector<napi_value> args(argc);
+  napi_value js_this;
+  nstatus = napi_get_cb_info(env, info, &argc, args.data(), &js_this, nullptr);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  ENSURE_ARGC_RETVAL(env, argc, value_count + 1, napi_invalid_arg);
+
+  nstatus = GetUniformLocationParam(env, args[0], location);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  for (size_t i = 0; i < value_count; ++i) {
+    nstatus = GetUniformValueParam(env, args[i + 1], &values[i]);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  }
+
+  nstatus = UnwrapContext(env, js_this, context);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
   return napi_ok;
 }
 
@@ -729,10 +915,9 @@ static napi_status GetUniformMatrixParams(napi_env env, napi_callback_info info,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
   ENSURE_ARGC_RETVAL(env, argc, 3, napi_invalid_arg);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], napi_invalid_arg);
   ENSURE_VALUE_IS_BOOLEAN_RETVAL(env, args[1], napi_invalid_arg);
 
-  nstatus = napi_get_value_int32(env, args[0], location);
+  nstatus = GetUniformLocationParam(env, args[0], location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
   bool transpose_bool;
   nstatus = napi_get_value_bool(env, args[1], &transpose_bool);
@@ -8303,19 +8488,15 @@ napi_value WebGLRenderingContext::GetUniform(napi_env env,
   nstatus = GetUint32AllowNull(env, args[0], &program);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  napi_valuetype location_type;
-  nstatus = napi_typeof(env, args[1], &location_type);
+  GLint location;
+  nstatus = GetUniformLocationParam(env, args[1], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  if (location_type == napi_null || location_type == napi_undefined) {
+  if (location < 0) {
     napi_value null_value;
     nstatus = napi_get_null(env, &null_value);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     return null_value;
   }
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
-  GLint location;
-  nstatus = napi_get_value_int32(env, args[1], &location);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   WebGLRenderingContext *context = nullptr;
   nstatus = UnwrapContext(env, js_this, &context);
@@ -8551,7 +8732,11 @@ napi_value WebGLRenderingContext::GetUniformLocation(napi_env env,
       program, uniform_name.c_str());
 
   napi_value location_value;
-  nstatus = napi_create_int32(env, location, &location_value);
+  if (location < 0) {
+    nstatus = napi_get_null(env, &location_value);
+  } else {
+    nstatus = WrapWebGLUniformLocation(env, location, &location_value);
+  }
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
 #if DEBUG
@@ -10477,31 +10662,14 @@ napi_value WebGLRenderingContext::TransformFeedbackVaryings(
 napi_value WebGLRenderingContext::Uniform1i(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform1i");
-  napi_status nstatus;
-
-  size_t argc = 2;
-  napi_value args[2];
-  napi_value js_this;
-  nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
-
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  GLint v0;
-  nstatus = napi_get_value_int32(env, args[1], &v0);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
   WebGLRenderingContext *context = nullptr;
-  nstatus = UnwrapContext(env, js_this, &context);
+  int32_t values[1];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 1, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glUniform1i(location, v0);
+  context->eglContextWrapper_->glUniform1i(location, values[0]);
 
 #if DEBUG
   context->CheckForErrors();
@@ -10522,10 +10690,8 @@ napi_value WebGLRenderingContext::Uniform1iv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb(kInt32);
@@ -10550,12 +10716,14 @@ napi_value WebGLRenderingContext::Uniform1iv(napi_env env,
 napi_value WebGLRenderingContext::Uniform1ui(napi_env env,
                                              napi_callback_info info) {
   LOG_CALL("Uniform1ui");
+  GLint location;
   WebGLRenderingContext *context = nullptr;
-  uint32_t args[2];
-  napi_status nstatus = GetContextUint32Params(env, info, &context, 2, args);
+  uint32_t values[1];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 1, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glUniform1ui, nullptr);
-  context->eglContextWrapper_->glUniform1ui(args[0], args[1]);
+  context->eglContextWrapper_->glUniform1ui(location, values[0]);
   return nullptr;
 }
 
@@ -10570,10 +10738,8 @@ napi_value WebGLRenderingContext::Uniform1uiv(napi_env env,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ArrayLikeBuffer alb(kUint32);
   nstatus = GetArrayLikeBuffer(env, args[1], &alb);
@@ -10593,31 +10759,15 @@ napi_value WebGLRenderingContext::Uniform1uiv(napi_env env,
 napi_value WebGLRenderingContext::Uniform1f(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform1f");
-  napi_status nstatus;
-
-  size_t argc = 2;
-  napi_value args[2];
-  napi_value js_this;
-  nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
-
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v0;
-  nstatus = napi_get_value_double(env, args[1], &v0);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
   WebGLRenderingContext *context = nullptr;
-  nstatus = UnwrapContext(env, js_this, &context);
+  double values[1];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 1, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glUniform1f(location, static_cast<GLfloat>(v0));
+  context->eglContextWrapper_->glUniform1f(location,
+                                           static_cast<GLfloat>(values[0]));
 
 #if DEBUG
   context->CheckForErrors();
@@ -10638,10 +10788,8 @@ napi_value WebGLRenderingContext::Uniform1fv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb;
@@ -10665,37 +10813,16 @@ napi_value WebGLRenderingContext::Uniform1fv(napi_env env,
 napi_value WebGLRenderingContext::Uniform2f(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform2f");
-  napi_status nstatus;
-
-  size_t argc = 3;
-  napi_value args[3];
-  napi_value js_this;
-  nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 3, nullptr);
-
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[2], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v0;
-  nstatus = napi_get_value_double(env, args[1], &v0);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v1;
-  nstatus = napi_get_value_double(env, args[2], &v1);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
   WebGLRenderingContext *context = nullptr;
-  nstatus = UnwrapContext(env, js_this, &context);
+  double values[2];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 2, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glUniform2f(location, static_cast<GLfloat>(v0),
-                                           static_cast<GLfloat>(v1));
+  context->eglContextWrapper_->glUniform2f(location,
+                                           static_cast<GLfloat>(values[0]),
+                                           static_cast<GLfloat>(values[1]));
 
 #if DEBUG
   context->CheckForErrors();
@@ -10716,10 +10843,8 @@ napi_value WebGLRenderingContext::Uniform2fv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb;
@@ -10744,14 +10869,14 @@ napi_value WebGLRenderingContext::Uniform2fv(napi_env env,
 napi_value WebGLRenderingContext::Uniform2i(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform2i");
-  napi_status nstatus;
-
+  GLint location;
   WebGLRenderingContext *context = nullptr;
-  int32_t args[3];
-  nstatus = GetContextInt32Params(env, info, &context, 3, args);
+  int32_t values[2];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 2, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glUniform2i(args[0], args[1], args[2]);
+  context->eglContextWrapper_->glUniform2i(location, values[0], values[1]);
 
 #if DEBUG
   context->CheckForErrors();
@@ -10772,10 +10897,8 @@ napi_value WebGLRenderingContext::Uniform2iv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb(kInt32);
@@ -10800,12 +10923,14 @@ napi_value WebGLRenderingContext::Uniform2iv(napi_env env,
 napi_value WebGLRenderingContext::Uniform2ui(napi_env env,
                                              napi_callback_info info) {
   LOG_CALL("Uniform2ui");
+  GLint location;
   WebGLRenderingContext *context = nullptr;
-  uint32_t args[3];
-  napi_status nstatus = GetContextUint32Params(env, info, &context, 3, args);
+  uint32_t values[2];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 2, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glUniform2ui, nullptr);
-  context->eglContextWrapper_->glUniform2ui(args[0], args[1], args[2]);
+  context->eglContextWrapper_->glUniform2ui(location, values[0], values[1]);
   return nullptr;
 }
 
@@ -10820,9 +10945,8 @@ napi_value WebGLRenderingContext::Uniform2uiv(napi_env env,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ArrayLikeBuffer alb(kUint32);
   nstatus = GetArrayLikeBuffer(env, args[1], &alb);
@@ -10841,13 +10965,15 @@ napi_value WebGLRenderingContext::Uniform2uiv(napi_env env,
 napi_value WebGLRenderingContext::Uniform3i(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform3i");
-
-  GLint args[4];
+  GLint location;
   WebGLRenderingContext *context = nullptr;
-  napi_status nstatus = GetContextInt32Params(env, info, &context, 4, args);
+  int32_t values[3];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 3, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glUniform3i(args[0], args[1], args[2], args[3]);
+  context->eglContextWrapper_->glUniform3i(location, values[0], values[1],
+                                           values[2]);
 
 #if DEBUG
   context->CheckForErrors();
@@ -10868,10 +10994,8 @@ napi_value WebGLRenderingContext::Uniform3iv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb(kInt32);
@@ -10896,43 +11020,16 @@ napi_value WebGLRenderingContext::Uniform3iv(napi_env env,
 napi_value WebGLRenderingContext::Uniform3f(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform3f");
-  napi_status nstatus;
-
-  size_t argc = 4;
-  napi_value args[4];
-  napi_value js_this;
-  nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 4, nullptr);
-
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[2], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[3], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v0;
-  nstatus = napi_get_value_double(env, args[1], &v0);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v1;
-  nstatus = napi_get_value_double(env, args[2], &v1);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v2;
-  nstatus = napi_get_value_double(env, args[3], &v2);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
   WebGLRenderingContext *context = nullptr;
-  nstatus = UnwrapContext(env, js_this, &context);
+  double values[3];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 3, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glUniform3f(location, static_cast<GLfloat>(v0),
-                                           static_cast<GLfloat>(v1),
-                                           static_cast<GLfloat>(v2));
+  context->eglContextWrapper_->glUniform3f(
+      location, static_cast<GLfloat>(values[0]),
+      static_cast<GLfloat>(values[1]), static_cast<GLfloat>(values[2]));
 
 #if DEBUG
   context->CheckForErrors();
@@ -10953,10 +11050,8 @@ napi_value WebGLRenderingContext::Uniform3fv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb;
@@ -10981,12 +11076,15 @@ napi_value WebGLRenderingContext::Uniform3fv(napi_env env,
 napi_value WebGLRenderingContext::Uniform3ui(napi_env env,
                                              napi_callback_info info) {
   LOG_CALL("Uniform3ui");
+  GLint location;
   WebGLRenderingContext *context = nullptr;
-  uint32_t args[4];
-  napi_status nstatus = GetContextUint32Params(env, info, &context, 4, args);
+  uint32_t values[3];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 3, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glUniform3ui, nullptr);
-  context->eglContextWrapper_->glUniform3ui(args[0], args[1], args[2], args[3]);
+  context->eglContextWrapper_->glUniform3ui(location, values[0], values[1],
+                                            values[2]);
   return nullptr;
 }
 
@@ -11001,9 +11099,8 @@ napi_value WebGLRenderingContext::Uniform3uiv(napi_env env,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ArrayLikeBuffer alb(kUint32);
   nstatus = GetArrayLikeBuffer(env, args[1], &alb);
@@ -11031,10 +11128,8 @@ napi_value WebGLRenderingContext::Uniform4fv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb;
@@ -11059,15 +11154,15 @@ napi_value WebGLRenderingContext::Uniform4fv(napi_env env,
 napi_value WebGLRenderingContext::Uniform4i(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform4i");
-  napi_status nstatus;
-
+  GLint location;
   WebGLRenderingContext *context = nullptr;
-  int32_t args[5];
-  nstatus = GetContextInt32Params(env, info, &context, 5, args);
+  int32_t values[4];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 4, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  context->eglContextWrapper_->glUniform4i(args[0], args[1], args[2], args[3],
-                                           args[4]);
+  context->eglContextWrapper_->glUniform4i(location, values[0], values[1],
+                                           values[2], values[3]);
 
 #if DEBUG
   context->CheckForErrors();
@@ -11088,10 +11183,8 @@ napi_value WebGLRenderingContext::Uniform4iv(napi_env env,
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   ArrayLikeBuffer alb(kInt32);
@@ -11116,48 +11209,17 @@ napi_value WebGLRenderingContext::Uniform4iv(napi_env env,
 napi_value WebGLRenderingContext::Uniform4f(napi_env env,
                                             napi_callback_info info) {
   LOG_CALL("Uniform4f");
-  napi_status nstatus;
-
-  size_t argc = 5;
-  napi_value args[5];
-  napi_value js_this;
-  nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-  ENSURE_ARGC_RETVAL(env, argc, 5, nullptr);
-
-  WebGLRenderingContext *context = nullptr;
-  nstatus = UnwrapContext(env, js_this, &context);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[1], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[2], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[3], nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[4], nullptr);
-
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v0;
-  nstatus = napi_get_value_double(env, args[1], &v0);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v1;
-  nstatus = napi_get_value_double(env, args[2], &v1);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v2;
-  nstatus = napi_get_value_double(env, args[3], &v2);
-  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
-
-  double v3;
-  nstatus = napi_get_value_double(env, args[4], &v3);
+  WebGLRenderingContext *context = nullptr;
+  double values[4];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 4, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   context->eglContextWrapper_->glUniform4f(
-      location, static_cast<GLfloat>(v0), static_cast<GLfloat>(v1),
-      static_cast<GLfloat>(v2), static_cast<GLfloat>(v3));
+      location, static_cast<GLfloat>(values[0]),
+      static_cast<GLfloat>(values[1]), static_cast<GLfloat>(values[2]),
+      static_cast<GLfloat>(values[3]));
 
 #if DEBUG
   context->CheckForErrors();
@@ -11169,13 +11231,15 @@ napi_value WebGLRenderingContext::Uniform4f(napi_env env,
 napi_value WebGLRenderingContext::Uniform4ui(napi_env env,
                                              napi_callback_info info) {
   LOG_CALL("Uniform4ui");
+  GLint location;
   WebGLRenderingContext *context = nullptr;
-  uint32_t args[5];
-  napi_status nstatus = GetContextUint32Params(env, info, &context, 5, args);
+  uint32_t values[4];
+  napi_status nstatus =
+      GetContextUniformParams(env, info, &context, 4, &location, values);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glUniform4ui, nullptr);
-  context->eglContextWrapper_->glUniform4ui(args[0], args[1], args[2], args[3],
-                                            args[4]);
+  context->eglContextWrapper_->glUniform4ui(location, values[0], values[1],
+                                            values[2], values[3]);
   return nullptr;
 }
 
@@ -11190,9 +11254,8 @@ napi_value WebGLRenderingContext::Uniform4uiv(napi_env env,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_ARGC_RETVAL(env, argc, 2, nullptr);
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ArrayLikeBuffer alb(kUint32);
   nstatus = GetArrayLikeBuffer(env, args[1], &alb);
@@ -11236,11 +11299,10 @@ napi_value WebGLRenderingContext::UniformMatrix2fv(napi_env env,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_BOOLEAN_RETVAL(env, args[1], nullptr);
 
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   bool transpose;
@@ -11315,11 +11377,10 @@ napi_value WebGLRenderingContext::UniformMatrix3fv(napi_env env,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_BOOLEAN_RETVAL(env, args[1], nullptr);
 
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   bool transpose;
@@ -11394,11 +11455,10 @@ napi_value WebGLRenderingContext::UniformMatrix4fv(napi_env env,
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, args[0], nullptr);
   ENSURE_VALUE_IS_BOOLEAN_RETVAL(env, args[1], nullptr);
 
   GLint location;
-  nstatus = napi_get_value_int32(env, args[0], &location);
+  nstatus = GetUniformLocationParam(env, args[0], &location);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
   bool transpose;

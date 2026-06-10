@@ -1270,10 +1270,15 @@ void main() {
   gl.clearColor(1, 0, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.useProgram(program);
-  gl.uniform1ui(gl.getUniformLocation(program, "u_scalar"), 7);
-  gl.uniform4uiv(
-      gl.getUniformLocation(program, "u_vector"),
-      new Uint32Array([1, 2, 3, 4]));
+  const scalarLocation = gl.getUniformLocation(program, "u_scalar");
+  const vectorLocation = gl.getUniformLocation(program, "u_vector");
+  assert.notStrictEqual(scalarLocation, null);
+  assert.strictEqual(typeof scalarLocation, "object");
+  assert.strictEqual(Boolean(scalarLocation), true);
+  assert.strictEqual(gl.getUniformLocation(program, "u_missing"), null);
+  gl.uniform1ui(scalarLocation, 7);
+  gl.uniform4uiv(vectorLocation, new Uint32Array([1, 2, 3, 4]));
+  assert.strictEqual(gl.getUniform(program, scalarLocation), 7);
   gl.drawArrays(gl.TRIANGLES, 0, 3);
   const pixel = new Uint8Array(4);
   gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);

@@ -53,8 +53,6 @@ function coloredRectanglesArrays() {
 function testProgramBufferAndDrawHelpers() {
   const gl = createContext();
   try {
-    // Keep the tested uniform away from numeric location 0, which TWGL treats
-    // as falsy even though browser WebGLUniformLocation objects are truthy.
     const programInfo = twgl.createProgramInfo(gl, [`
 attribute vec2 position;
 attribute vec4 color;
@@ -65,11 +63,10 @@ void main() {
 }
 `, `
 precision mediump float;
-uniform float a_dummy;
 uniform vec4 u_tint;
 varying vec4 v_color;
 void main() {
-  gl_FragColor = v_color * u_tint + vec4(a_dummy * 0.0);
+  gl_FragColor = v_color * u_tint;
 }
 `]);
     const bufferInfo =
@@ -83,7 +80,7 @@ void main() {
     gl.useProgram(programInfo.program);
 
     twgl.setBuffersAndAttributes(gl, programInfo, bufferInfo);
-    twgl.setUniforms(programInfo, {a_dummy: 0, u_tint: [1, 1, 1, 1]});
+    twgl.setUniforms(programInfo, {u_tint: [1, 1, 1, 1]});
     twgl.drawBufferInfo(gl, bufferInfo);
 
     assertPixelNear(readPixel(gl, 8, 16), [255, 0, 0, 255], "left rectangle");
