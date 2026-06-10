@@ -41,29 +41,32 @@ macOS x64 is build-only in CI because hosted-runner smoke currently hits
 extension strings. Runtime availability still depends on the selected ANGLE
 backend.
 
-| Extension | Status |
-| --- | --- |
-| `ANGLE_instanced_arrays` | Exposed |
-| `EXT_blend_minmax` | Exposed |
-| `EXT_color_buffer_float` / `WEBGL_color_buffer_float` | Exposed |
-| `EXT_color_buffer_half_float` | Exposed |
-| `EXT_frag_depth` | Exposed |
-| `EXT_float_blend` | Exposed |
-| `EXT_sRGB` | Exposed |
-| `EXT_shader_texture_lod` | Exposed |
-| `EXT_texture_filter_anisotropic` | Exposed |
-| `EXT_texture_mirror_clamp_to_edge` | Exposed |
-| `OES_element_index_uint` | Exposed |
-| `OES_standard_derivatives` | Exposed |
-| `OES_texture_float` / `OES_texture_float_linear` | Exposed |
-| `OES_texture_half_float` / `OES_texture_half_float_linear` | Exposed |
-| `OES_vertex_array_object` | Exposed |
-| `WEBGL_debug_renderer_info` | Exposed |
-| `WEBGL_depth_texture` | Exposed |
-| `WEBGL_draw_buffers` | Exposed |
-| `WEBGL_lose_context` | Exposed |
-| `EXT_disjoint_timer_query` / `EXT_disjoint_timer_query_webgl2` | Not exposed |
-| `WEBGL_compressed_texture_s3tc` / `WEBGL_compressed_texture_s3tc_srgb` | Exposed |
+### Exposed
+
+- `ANGLE_instanced_arrays`
+- `EXT_blend_minmax`
+- `EXT_color_buffer_float` / `WEBGL_color_buffer_float`
+- `EXT_color_buffer_half_float`
+- `EXT_frag_depth`
+- `EXT_float_blend`
+- `EXT_sRGB`
+- `EXT_shader_texture_lod`
+- `EXT_texture_filter_anisotropic`
+- `EXT_texture_mirror_clamp_to_edge`
+- `OES_element_index_uint`
+- `OES_standard_derivatives`
+- `OES_texture_float` / `OES_texture_float_linear`
+- `OES_texture_half_float` / `OES_texture_half_float_linear`
+- `OES_vertex_array_object`
+- `WEBGL_compressed_texture_s3tc` / `WEBGL_compressed_texture_s3tc_srgb`
+- `WEBGL_debug_renderer_info`
+- `WEBGL_depth_texture`
+- `WEBGL_draw_buffers`
+- `WEBGL_lose_context`
+
+### Not Exposed
+
+- `EXT_disjoint_timer_query` / `EXT_disjoint_timer_query_webgl2`
 
 ## Install
 
