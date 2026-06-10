@@ -105,6 +105,18 @@ function assertPixelNear(pixel, expected, label, tolerance = 2) {
   }
 }
 
+function assertPixelBlockNear(pixels, expected, label, tolerance = 2) {
+  assert.strictEqual(
+      pixels.length, expected.length,
+      `${label}: expected length ${expected.length}, got ${pixels.length}`);
+  for (let offset = 0; offset < expected.length; offset += 4) {
+    assertPixelNear(
+        pixels.subarray(offset, offset + 4),
+        expected.subarray(offset, offset + 4),
+        `${label} pixel ${offset / 4}`, tolerance);
+  }
+}
+
 function assertNumberNear(actual, expected, label, tolerance = 1e-6) {
   assert.strictEqual(
       typeof actual, "number", `${label}: expected number, got ${actual}`);
@@ -735,6 +747,41 @@ function testMultisampleFramebufferOperations(gl) {
   gl.deleteRenderbuffer(multisampleRenderbuffer);
   gl.deleteTexture(resolveTexture);
   assertNoError(gl, "multisample framebuffer operations");
+}
+
+function testTexStorage2DAndMultiPixelReadback(gl) {
+  const width = 2;
+  const height = 2;
+  const sourcePixels = new Uint8Array([
+    255, 0, 0, 255, 0, 255, 0, 255,
+    0, 0, 255, 255, 255, 255, 0, 255
+  ]);
+
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  configureTexture(gl, gl.TEXTURE_2D);
+  gl.texStorage2D(gl.TEXTURE_2D, 1, gl.RGBA8, width, height);
+  gl.texSubImage2D(
+      gl.TEXTURE_2D, 0, 0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE,
+      sourcePixels);
+
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  gl.framebufferTexture2D(
+      gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  assert.strictEqual(
+      gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+
+  const readback = new Uint8Array(width * height * 4);
+  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, readback);
+  assertPixelBlockNear(
+      readback, sourcePixels, "texStorage2D multi-pixel readPixels");
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.bindTexture(gl.TEXTURE_2D, null);
+  gl.deleteFramebuffer(framebuffer);
+  gl.deleteTexture(texture);
+  assertNoError(gl, "texStorage2D multi-pixel readback");
 }
 
 function testUnsignedIntegerUniforms(gl) {
@@ -2506,6 +2553,7 @@ testSyncObjects(gl);
 testTypedArrayTextureUploadOffsets(gl);
 testPixelBufferObjectNumericOffsets(gl);
 testMultisampleFramebufferOperations(gl);
+testTexStorage2DAndMultiPixelReadback(gl);
 testUnsignedIntegerUniforms(gl);
 testNonSquareUniformMatrices(gl);
 testQueryObjects(gl);

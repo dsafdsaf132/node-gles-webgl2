@@ -32,6 +32,37 @@ through WebGL2-compatible JavaScript method names.
 | Windows x64   | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
 | Windows arm64 | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
 
+macOS x64 is build-only in CI because hosted-runner smoke currently hits
+`Error: No display`.
+
+## Extension Support
+
+`getSupportedExtensions()` reports WebGL extension names, not raw `GL_*` ANGLE
+extension strings. Runtime availability still depends on the selected ANGLE
+backend.
+
+| Extension | Status |
+| --- | --- |
+| `ANGLE_instanced_arrays` | Exposed |
+| `EXT_blend_minmax` | Exposed |
+| `EXT_color_buffer_float` / `WEBGL_color_buffer_float` | Exposed |
+| `EXT_color_buffer_half_float` | Exposed |
+| `EXT_frag_depth` | Exposed |
+| `EXT_sRGB` | Exposed |
+| `EXT_shader_texture_lod` | Exposed |
+| `EXT_texture_filter_anisotropic` | Exposed |
+| `OES_element_index_uint` | Exposed |
+| `OES_standard_derivatives` | Exposed |
+| `OES_texture_float` / `OES_texture_float_linear` | Exposed |
+| `OES_texture_half_float` / `OES_texture_half_float_linear` | Exposed |
+| `OES_vertex_array_object` | Exposed |
+| `WEBGL_debug_renderer_info` | Exposed |
+| `WEBGL_depth_texture` | Exposed |
+| `WEBGL_draw_buffers` | Exposed |
+| `WEBGL_lose_context` | Exposed |
+| `EXT_disjoint_timer_query` / `EXT_disjoint_timer_query_webgl2` | Not exposed |
+| `WEBGL_compressed_texture_s3tc` / `WEBGL_compressed_texture_s3tc_srgb` | Not exposed |
+
 ## Install
 
 From npm:
