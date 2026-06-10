@@ -412,6 +412,44 @@ static napi_status GetStringParam(napi_env env, napi_value string_value,
   return napi_ok;
 }
 
+static napi_status GetOptionalStringArrayParam(napi_env env, napi_value value,
+                                               const char *name,
+                                               std::vector<std::string> *out) {
+  napi_valuetype value_type;
+  napi_status nstatus = napi_typeof(env, value, &value_type);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  if (value_type == napi_undefined || value_type == napi_null) {
+    return napi_ok;
+  }
+
+  bool is_array = false;
+  nstatus = napi_is_array(env, value, &is_array);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  if (!is_array) {
+    std::string message = std::string(name) + " must be an array";
+    NAPI_THROW_ERROR(env, message.c_str());
+    return napi_invalid_arg;
+  }
+
+  uint32_t length = 0;
+  nstatus = napi_get_array_length(env, value, &length);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+  for (uint32_t i = 0; i < length; ++i) {
+    napi_value item;
+    nstatus = napi_get_element(env, value, i, &item);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+    std::string extension_name;
+    nstatus = GetStringParam(env, item, extension_name);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+    out->push_back(extension_name);
+  }
+
+  return napi_ok;
+}
+
 static napi_status CreateInfoLogString(napi_env env, const char *log,
                                        GLsizei length, napi_value *result) {
   if (log == nullptr || length <= 0) {
@@ -1976,7 +2014,10 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
       ref_(nullptr),
       eglContextWrapper_(nullptr),
       drawing_buffer_color_space_("srgb"),
-      unpack_color_space_("srgb") {
+      unpack_color_space_("srgb"),
+      has_enabled_extensions_filter_(opts.has_enabled_extensions_filter),
+      enabled_extensions_(opts.enabled_extensions),
+      disabled_extensions_(opts.disabled_extensions) {
   eglContextWrapper_ = EGLContextWrapper::Create(env, opts);
   if (!eglContextWrapper_) {
     bool exception_pending = false;
@@ -3061,13 +3102,13 @@ napi_status WebGLRenderingContext::NewInstance(napi_env env,
   nstatus = napi_get_reference_value(env, constructor_ref_, &ctor_value);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
 
-  size_t argc = 5;
-  napi_value args[5];
+  size_t argc = 7;
+  napi_value args[7];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
   ENSURE_ARGC_RETVAL(env, argc, 5, nstatus);
-  argc = std::min(argc, static_cast<size_t>(5));
+  argc = std::min(argc, static_cast<size_t>(7));
 
   nstatus = napi_new_instance(env, ctor_value, argc, args, instance);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
@@ -3082,8 +3123,8 @@ napi_value WebGLRenderingContext::InitInternal(napi_env env,
 
   ENSURE_CONSTRUCTOR_CALL_RETVAL(env, info, nullptr);
 
-  size_t argc = 5;
-  napi_value args[5];
+  size_t argc = 7;
+  napi_value args[7];
   napi_value js_this;
   nstatus = napi_get_cb_info(env, info, &argc, args, &js_this, nullptr);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -3104,6 +3145,23 @@ napi_value WebGLRenderingContext::InitInternal(napi_env env,
 
   nstatus = napi_get_value_bool(env, args[4], &opts.webgl_compatibility);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+  if (argc > 5) {
+    napi_valuetype value_type;
+    nstatus = napi_typeof(env, args[5], &value_type);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    opts.has_enabled_extensions_filter =
+        value_type != napi_undefined && value_type != napi_null;
+    nstatus = GetOptionalStringArrayParam(env, args[5], "enabledExtensions",
+                                          &opts.enabled_extensions);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
+
+  if (argc > 6) {
+    nstatus = GetOptionalStringArrayParam(env, args[6], "disabledExtensions",
+                                          &opts.disabled_extensions);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  }
 
   WebGLRenderingContext *context =
       new (std::nothrow) WebGLRenderingContext(env, opts);
@@ -6172,6 +6230,16 @@ static bool ExtensionNameEqualsIgnoringCase(const std::string &input,
   return i == input.size() && extension[i] == '\0';
 }
 
+static bool ExtensionListContains(const std::vector<std::string> &extensions,
+                                  const char *extension) {
+  for (const std::string &entry : extensions) {
+    if (ExtensionNameEqualsIgnoringCase(entry, extension)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static bool SupportsANGLEInstancedArrays(EGLContextWrapper *egl_ctx) {
   return (egl_ctx->glDrawArraysInstanced && egl_ctx->glDrawElementsInstanced &&
           egl_ctx->glVertexAttribDivisor) ||
@@ -6318,6 +6386,28 @@ static const WebGLExtensionDescriptor *CanonicalWebGLExtension(
   return nullptr;
 }
 
+static bool WebGLExtensionDescriptorsAlias(
+    const WebGLExtensionDescriptor *lhs, const WebGLExtensionDescriptor *rhs) {
+  return lhs != nullptr && rhs != nullptr &&
+         lhs->is_supported == rhs->is_supported &&
+         lhs->new_instance == rhs->new_instance;
+}
+
+static bool ExtensionListContainsExtensionOrAlias(
+    const std::vector<std::string> &extensions, const char *extension) {
+  const WebGLExtensionDescriptor *target = CanonicalWebGLExtension(extension);
+  for (const std::string &entry : extensions) {
+    if (ExtensionNameEqualsIgnoringCase(entry, extension)) {
+      return true;
+    }
+    const WebGLExtensionDescriptor *listed = CanonicalWebGLExtension(entry);
+    if (WebGLExtensionDescriptorsAlias(listed, target)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 static void AddUniqueExtension(std::vector<std::string> *extensions,
                                const char *extension) {
   if (extension == nullptr || extension[0] == '\0') {
@@ -6327,6 +6417,22 @@ static void AddUniqueExtension(std::vector<std::string> *extensions,
       extensions->end()) {
     extensions->push_back(extension);
   }
+}
+
+bool WebGLRenderingContext::IsExtensionAllowed(
+    const char *extension_name) const {
+  if (extension_name == nullptr || extension_name[0] == '\0') {
+    return false;
+  }
+  if (!enabled_extensions_.empty() &&
+      !ExtensionListContains(enabled_extensions_, extension_name)) {
+    return false;
+  }
+  if (has_enabled_extensions_filter_ && enabled_extensions_.empty()) {
+    return false;
+  }
+  return !ExtensionListContainsExtensionOrAlias(disabled_extensions_,
+                                               extension_name);
 }
 
 /* static */
@@ -6356,7 +6462,8 @@ napi_value WebGLRenderingContext::GetExtension(napi_env env,
   EGLContextWrapper *egl_ctx = context->eglContextWrapper_;
 
   napi_value webgl_extension = nullptr;
-  if (extension != nullptr && extension->is_supported(egl_ctx)) {
+  if (extension != nullptr && context->IsExtensionAllowed(extension->name) &&
+      extension->is_supported(egl_ctx)) {
     nstatus = extension->new_instance(env, js_this, egl_ctx, &webgl_extension);
   } else {
     nstatus = napi_get_null(env, &webgl_extension);
@@ -7842,7 +7949,8 @@ napi_value WebGLRenderingContext::GetSupportedExtensions(
 
   std::vector<std::string> supported_extensions;
   for (const WebGLExtensionDescriptor &extension : kKnownWebGLExtensions) {
-    if (extension.is_supported(context->eglContextWrapper_)) {
+    if (context->IsExtensionAllowed(extension.name) &&
+        extension.is_supported(context->eglContextWrapper_)) {
       AddUniqueExtension(&supported_extensions, extension.name);
     }
   }
