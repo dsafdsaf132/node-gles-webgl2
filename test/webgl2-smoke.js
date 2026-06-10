@@ -445,6 +445,32 @@ function testCompressedTextureS3TC(gl) {
   assertNoError(gl, "WEBGL_compressed_texture_s3tc_srgb smoke");
 }
 
+function assertDebugRendererRawEnumsBlocked(gl, label) {
+  assert.strictEqual(
+      gl.getParameter(0x9245), null,
+      `${label}: raw UNMASKED_VENDOR_WEBGL should be blocked`);
+  assert.strictEqual(
+      gl.getError(), gl.INVALID_ENUM,
+      `${label}: raw UNMASKED_VENDOR_WEBGL error`);
+  assert.strictEqual(
+      gl.getParameter(0x9246), null,
+      `${label}: raw UNMASKED_RENDERER_WEBGL should be blocked`);
+  assert.strictEqual(
+      gl.getError(), gl.INVALID_ENUM,
+      `${label}: raw UNMASKED_RENDERER_WEBGL error`);
+  assert.strictEqual(gl.getError(), gl.NO_ERROR);
+}
+
+function assertStandardRendererStringsAvailable(gl, label) {
+  assert.strictEqual(
+      typeof gl.getParameter(gl.VENDOR), "string", `${label}: VENDOR`);
+  assert.strictEqual(
+      typeof gl.getParameter(gl.RENDERER), "string", `${label}: RENDERER`);
+  assert.strictEqual(
+      typeof gl.getParameter(gl.SHADING_LANGUAGE_VERSION), "string",
+      `${label}: SHADING_LANGUAGE_VERSION`);
+}
+
 function testExtensionCreationOptions() {
   const defaultGl = createContext();
   const defaultExtensions = defaultGl.getSupportedExtensions();
@@ -460,6 +486,8 @@ function testExtensionCreationOptions() {
     const supported = gl.getSupportedExtensions();
     assert.deepStrictEqual(supported, []);
     assert.strictEqual(gl.getExtension("WEBGL_lose_context"), null);
+    assertDebugRendererRawEnumsBlocked(gl, "empty enabledExtensions");
+    assertStandardRendererStringsAvailable(gl, "empty enabledExtensions");
   } finally {
     gl.destroy();
   }
@@ -472,6 +500,19 @@ function testExtensionCreationOptions() {
     assert.deepStrictEqual(supported, ["WEBGL_lose_context"]);
     assert.notStrictEqual(gl.getExtension("webgl_lose_context"), null);
     assert.strictEqual(gl.getExtension("WEBGL_debug_renderer_info"), null);
+    assertDebugRendererRawEnumsBlocked(gl, "WEBGL_lose_context allowlist");
+    assertStandardRendererStringsAvailable(gl, "WEBGL_lose_context allowlist");
+  } finally {
+    gl.destroy();
+  }
+
+  gl = createContext({
+    enabledExtensions: ["webgl_LOSE_context"]
+  });
+  try {
+    const supported = gl.getSupportedExtensions();
+    assert.deepStrictEqual(supported, ["WEBGL_lose_context"]);
+    assert.notStrictEqual(gl.getExtension("WEBGL_lose_context"), null);
   } finally {
     gl.destroy();
   }
@@ -506,7 +547,46 @@ function testExtensionCreationOptions() {
 
   if (supportsColorBufferFloatAliases) {
     gl = createContext({
+      enabledExtensions: ["EXT_color_buffer_float"]
+    });
+    try {
+      const supported = gl.getSupportedExtensions();
+      assert(supported.includes("EXT_color_buffer_float"));
+      assert(supported.includes("WEBGL_color_buffer_float"));
+      assert.notStrictEqual(gl.getExtension("EXT_color_buffer_float"), null);
+      assert.notStrictEqual(gl.getExtension("WEBGL_color_buffer_float"), null);
+    } finally {
+      gl.destroy();
+    }
+
+    gl = createContext({
+      enabledExtensions: ["WEBGL_color_buffer_float"]
+    });
+    try {
+      const supported = gl.getSupportedExtensions();
+      assert(supported.includes("EXT_color_buffer_float"));
+      assert(supported.includes("WEBGL_color_buffer_float"));
+      assert.notStrictEqual(gl.getExtension("EXT_color_buffer_float"), null);
+      assert.notStrictEqual(gl.getExtension("WEBGL_color_buffer_float"), null);
+    } finally {
+      gl.destroy();
+    }
+
+    gl = createContext({
       disabledExtensions: ["EXT_color_buffer_float"]
+    });
+    try {
+      const supported = gl.getSupportedExtensions();
+      assert(!supported.includes("EXT_color_buffer_float"));
+      assert(!supported.includes("WEBGL_color_buffer_float"));
+      assert.strictEqual(gl.getExtension("EXT_color_buffer_float"), null);
+      assert.strictEqual(gl.getExtension("WEBGL_color_buffer_float"), null);
+    } finally {
+      gl.destroy();
+    }
+
+    gl = createContext({
+      disabledExtensions: ["WEBGL_color_buffer_float"]
     });
     try {
       const supported = gl.getSupportedExtensions();
@@ -707,6 +787,82 @@ function testGetParameterSemantics(gl) {
   assert.strictEqual(gl.getParameter(0xdeadbeef), null);
   assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
   assert.strictEqual(gl.getError(), gl.NO_ERROR);
+}
+
+function testExposedExtensionSemantics(gl) {
+  const blendMinmax = gl.getExtension("EXT_blend_minmax");
+  if (blendMinmax) {
+    assert.strictEqual(blendMinmax.MIN_EXT, gl.MIN);
+    assert.strictEqual(blendMinmax.MAX_EXT, gl.MAX);
+    const previousEquationRGB = gl.getParameter(gl.BLEND_EQUATION_RGB);
+    const previousEquationAlpha = gl.getParameter(gl.BLEND_EQUATION_ALPHA);
+    gl.blendEquation(blendMinmax.MIN_EXT);
+    assert.strictEqual(gl.getParameter(gl.BLEND_EQUATION), blendMinmax.MIN_EXT);
+    gl.blendEquation(blendMinmax.MAX_EXT);
+    assert.strictEqual(gl.getParameter(gl.BLEND_EQUATION), blendMinmax.MAX_EXT);
+    gl.blendEquationSeparate(previousEquationRGB, previousEquationAlpha);
+    assertNoError(gl, "EXT_blend_minmax blendEquation");
+  }
+
+  const srgb = gl.getExtension("EXT_sRGB");
+  if (srgb) {
+    assert.strictEqual(srgb.SRGB_EXT, 0x8c40);
+    assert.strictEqual(srgb.SRGB_ALPHA_EXT, 0x8c42);
+    assert.strictEqual(srgb.SRGB8_ALPHA8_EXT, gl.SRGB8_ALPHA8);
+    assert.strictEqual(
+        srgb.FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING_EXT,
+        gl.FRAMEBUFFER_ATTACHMENT_COLOR_ENCODING);
+  }
+
+  const anisotropy = gl.getExtension("EXT_texture_filter_anisotropic");
+  if (anisotropy) {
+    assert.strictEqual(anisotropy.TEXTURE_MAX_ANISOTROPY_EXT, 0x84fe);
+    assert.strictEqual(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT, 0x84ff);
+    const maxAnisotropy =
+        gl.getParameter(anisotropy.MAX_TEXTURE_MAX_ANISOTROPY_EXT);
+    assert.strictEqual(typeof maxAnisotropy, "number");
+    const requestedAnisotropy = Math.max(1, Math.min(2, maxAnisotropy));
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texParameterf(
+        gl.TEXTURE_2D, anisotropy.TEXTURE_MAX_ANISOTROPY_EXT,
+        requestedAnisotropy);
+    assertNumberNear(
+        gl.getTexParameter(
+            gl.TEXTURE_2D, anisotropy.TEXTURE_MAX_ANISOTROPY_EXT),
+        requestedAnisotropy, "EXT_texture_filter_anisotropic round-trip");
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.deleteTexture(texture);
+    assertNoError(gl, "EXT_texture_filter_anisotropic round-trip");
+  }
+
+  const halfFloat = gl.getExtension("OES_texture_half_float");
+  if (halfFloat) {
+    assert.strictEqual(halfFloat.HALF_FLOAT_OES, 0x8d61);
+  }
+
+  const depthTexture = gl.getExtension("WEBGL_depth_texture");
+  if (depthTexture) {
+    assert.strictEqual(
+        depthTexture.UNSIGNED_INT_24_8_WEBGL, gl.UNSIGNED_INT_24_8);
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    configureTexture(gl, gl.TEXTURE_2D);
+    gl.texImage2D(
+        gl.TEXTURE_2D, 0, gl.DEPTH24_STENCIL8, 1, 1, 0,
+        gl.DEPTH_STENCIL, depthTexture.UNSIGNED_INT_24_8_WEBGL, null);
+    const framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(
+        gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.TEXTURE_2D, texture, 0);
+    assert.strictEqual(
+        gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    gl.deleteFramebuffer(framebuffer);
+    gl.deleteTexture(texture);
+    assertNoError(gl, "WEBGL_depth_texture depth-stencil attachment");
+  }
 }
 
 function assertEXTFloatBlendDraw(gl, label) {
@@ -1161,6 +1317,90 @@ void main() {
   gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
   assertPixelNear(pixel, [0, 255, 0, 255], "non-square uniform matrices");
   assertNoError(gl, "non-square uniform matrices");
+}
+
+function testUniformBufferObjects(gl) {
+  const program = createProgramFromSources(gl, `#version 300 es
+void main() {
+  vec2 positions[3] = vec2[3](
+      vec2(-1.0, -1.0),
+      vec2(3.0, -1.0),
+      vec2(-1.0, 3.0));
+  gl_Position = vec4(positions[gl_VertexID], 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+layout(std140) uniform ColorBlock {
+  vec4 u_color;
+};
+out vec4 out_color;
+void main() {
+  out_color = u_color;
+}
+`);
+  const blockIndex = gl.getUniformBlockIndex(program, "ColorBlock");
+  assert.notStrictEqual(blockIndex, gl.INVALID_INDEX);
+  assert.strictEqual(
+      gl.getActiveUniformBlockName(program, blockIndex), "ColorBlock");
+  assert.strictEqual(
+      gl.getActiveUniformBlockParameter(
+          program, blockIndex, gl.UNIFORM_BLOCK_ACTIVE_UNIFORMS),
+      1);
+  const activeUniformIndices = gl.getActiveUniformBlockParameter(
+      program, blockIndex, gl.UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES);
+  assert(Array.isArray(activeUniformIndices));
+  assert.strictEqual(activeUniformIndices.length, 1);
+  const blockSize = gl.getActiveUniformBlockParameter(
+      program, blockIndex, gl.UNIFORM_BLOCK_DATA_SIZE);
+  assert(blockSize >= 16);
+
+  const bindingPoint = 0;
+  gl.uniformBlockBinding(program, blockIndex, bindingPoint);
+  assert.strictEqual(
+      gl.getActiveUniformBlockParameter(
+          program, blockIndex, gl.UNIFORM_BLOCK_BINDING),
+      bindingPoint);
+
+  const byteLength =
+      Math.max(16, Math.ceil(blockSize / Float32Array.BYTES_PER_ELEMENT) *
+                       Float32Array.BYTES_PER_ELEMENT);
+  const rangeOffset =
+      gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT) *
+      Float32Array.BYTES_PER_ELEMENT;
+  const totalByteLength = rangeOffset + byteLength;
+  const data =
+      new Float32Array(totalByteLength / Float32Array.BYTES_PER_ELEMENT);
+  data.set([0, 1, 0, 1], rangeOffset / Float32Array.BYTES_PER_ELEMENT);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.UNIFORM_BUFFER, buffer);
+  gl.bufferData(gl.UNIFORM_BUFFER, data, gl.STATIC_DRAW);
+  gl.bindBufferRange(
+      gl.UNIFORM_BUFFER, bindingPoint, buffer, rangeOffset, byteLength);
+  assert.strictEqual(
+      gl.getIndexedParameter(gl.UNIFORM_BUFFER_BINDING, bindingPoint), buffer);
+  assert.strictEqual(
+      gl.getIndexedParameter(gl.UNIFORM_BUFFER_START, bindingPoint),
+      rangeOffset);
+  assert.strictEqual(
+      gl.getIndexedParameter(gl.UNIFORM_BUFFER_SIZE, bindingPoint), byteLength);
+
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, 16, 16);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.useProgram(program);
+  gl.drawArrays(gl.TRIANGLES, 0, 3);
+  const pixel = new Uint8Array(4);
+  gl.readPixels(8, 8, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+  assertPixelNear(pixel, [0, 255, 0, 255], "uniform buffer object draw");
+
+  gl.bindBufferBase(gl.UNIFORM_BUFFER, bindingPoint, null);
+  assert.strictEqual(
+      gl.getIndexedParameter(gl.UNIFORM_BUFFER_BINDING, bindingPoint), 0);
+  gl.bindBuffer(gl.UNIFORM_BUFFER, null);
+  gl.deleteBuffer(buffer);
+  gl.deleteProgram(program);
+  assertNoError(gl, "uniform buffer object smoke");
 }
 
 function testQueryObjects(gl) {
@@ -2854,6 +3094,7 @@ testExtensionCreationOptions();
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
 testGetParameterSemantics(gl);
+testExposedExtensionSemantics(gl);
 testEXTFloatBlendImplicitEnable();
 testBufferCopyAndReadback(gl);
 testSamplerObjects(gl);
@@ -2864,6 +3105,7 @@ testMultisampleFramebufferOperations(gl);
 testTexStorage2DAndMultiPixelReadback(gl);
 testUnsignedIntegerUniforms(gl);
 testNonSquareUniformMatrices(gl);
+testUniformBufferObjects(gl);
 testQueryObjects(gl);
 testTransformFeedbackObjects(gl);
 testIntegerVertexAttributes(gl);

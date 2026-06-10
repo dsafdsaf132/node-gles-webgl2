@@ -6232,16 +6232,6 @@ static bool ExtensionNameEqualsIgnoringCase(const std::string &input,
   return i == input.size() && extension[i] == '\0';
 }
 
-static bool ExtensionListContains(const std::vector<std::string> &extensions,
-                                  const char *extension) {
-  for (const std::string &entry : extensions) {
-    if (ExtensionNameEqualsIgnoringCase(entry, extension)) {
-      return true;
-    }
-  }
-  return false;
-}
-
 static bool SupportsANGLEInstancedArrays(EGLContextWrapper *egl_ctx) {
   return (egl_ctx->glDrawArraysInstanced && egl_ctx->glDrawElementsInstanced &&
           egl_ctx->glVertexAttribDivisor) ||
@@ -6445,14 +6435,15 @@ bool WebGLRenderingContext::IsExtensionAllowed(
     return false;
   }
   if (!enabled_extensions_.empty() &&
-      !ExtensionListContains(enabled_extensions_, extension_name)) {
+      !ExtensionListContainsExtensionOrAlias(enabled_extensions_,
+                                             extension_name)) {
     return false;
   }
   if (has_enabled_extensions_filter_ && enabled_extensions_.empty()) {
     return false;
   }
   return !ExtensionListContainsExtensionOrAlias(disabled_extensions_,
-                                               extension_name);
+                                                extension_name);
 }
 
 /* static */
@@ -6788,18 +6779,40 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     }
 
     case kUnmaskedVendorWebGL:
-    case kUnmaskedRendererWebGL:
-    case GL_VENDOR:
-    case GL_RENDERER:
-    case GL_SHADING_LANGUAGE_VERSION: {
+    case kUnmaskedRendererWebGL: {
+      if (!context->IsExtensionAllowed("WEBGL_debug_renderer_info")) {
+        QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                        GL_INVALID_ENUM);
+        napi_value null_value;
+        nstatus = napi_get_null(env, &null_value);
+        ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+        return null_value;
+      }
+
       GLenum string_name = name;
       if (name == kUnmaskedVendorWebGL) {
         string_name = GL_VENDOR;
-      } else if (name == kUnmaskedRendererWebGL) {
+      } else {
         string_name = GL_RENDERER;
       }
       const GLubyte *str =
           context->eglContextWrapper_->glGetString(string_name);
+      if (str) {
+        const char *str_c_str = reinterpret_cast<const char *>(str);
+        napi_value str_value;
+        nstatus = napi_create_string_utf8(env, str_c_str, strlen(str_c_str),
+                                          &str_value);
+        ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
+        return str_value;
+      }
+      break;
+    }
+
+    case GL_VENDOR:
+    case GL_RENDERER:
+    case GL_SHADING_LANGUAGE_VERSION: {
+      const GLubyte *str = context->eglContextWrapper_->glGetString(name);
       if (str) {
         const char *str_c_str = reinterpret_cast<const char *>(str);
         napi_value str_value;
