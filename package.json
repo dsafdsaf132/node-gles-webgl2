@@ -14,7 +14,7 @@
   },
   "homepage": "https://github.com/dsafdsaf132/node-gles-webgl2#readme",
   "engines": {
-    "node": ">=8.11.0"
+    "node": ">=12.0.0"
   },
   "license": "Apache-2.0",
   "keywords": [
@@ -73,7 +73,7 @@
     "typescript": "3.0.3"
   },
   "dependencies": {
-    "adm-zip": "^0.4.13",
+    "adm-zip": "0.5.18",
     "bindings": "^1.3.0",
     "https-proxy-agent": "^5.0.1",
     "progress": "^2.0.3"
