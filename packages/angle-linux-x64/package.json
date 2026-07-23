@@ -1,6 +1,6 @@
 {
   "name": "@dsafdsaf132/node-gles-webgl2-linux-x64",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Bundled ANGLE libraries for node-gles-webgl2 on Linux x64",
   "license": "BSD-3-Clause",
   "os": [
