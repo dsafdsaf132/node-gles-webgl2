@@ -1,0 +1,15 @@
+{
+  "release": "angle-main-28385",
+  "angleCommit": "aa5f0107c9db735e9bcdc2f2c5abebfbfa939e17",
+  "angleRef": "main",
+  "buildType": "Release",
+  "generatedAt": "2026-07-19T01:41:30Z",
+  "platforms": [
+    "darwin-arm64",
+    "darwin-x64",
+    "linux-arm64",
+    "linux-x64",
+    "win32-arm64",
+    "win32-x64"
+  ]
+}

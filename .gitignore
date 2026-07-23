@@ -1,6 +1,5 @@
 build/
 dist/
-deps/
 node_modules/
 yarn-error.log
 demo/train-*

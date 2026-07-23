@@ -17,7 +17,7 @@
 # Node.js TensorFlow Binding config:
 {
   'variables' : {
-    'angle_lib_dir': '<(module_root_dir)/deps/angle/out/Release'
+    'angle_lib_dir': '<!(node scripts/resolve-angle-path.js)'
   },
   'targets' : [{
     'target_name' : 'nodejs_gl_binding',
@@ -41,7 +41,9 @@
             '-lGLESv2',
             '-lEGL',
           ],
-          'library_dirs' : ['<(angle_lib_dir)'],
+          'library_dirs' : [
+            '<(angle_lib_dir)'
+          ],
         }
       ],
       [
@@ -51,14 +53,18 @@
             '-lGLESv2',
             '-lEGL',
           ],
-          'library_dirs' : ['<(angle_lib_dir)'],
+          'library_dirs' : [
+            '<(angle_lib_dir)'
+          ],
         }
       ],
       [
         'OS=="win"', {
           'defines': ['COMPILER_MSVC', 'NOMINMAX'],
           'libraries': ['libGLESv2', 'libEGL'],
-          'library_dirs' : ['<(angle_lib_dir)'],
+          'library_dirs' : [
+            '<(angle_lib_dir)'
+          ],
         },
       ]
     ]

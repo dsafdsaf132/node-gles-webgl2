@@ -17,6 +17,6 @@
 set -e
 
 node scripts/clean-dist.js
-yarn
+npm install --ignore-scripts
 tsc --sourceMap false
 npm pack

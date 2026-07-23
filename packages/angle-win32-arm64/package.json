@@ -1,0 +1,21 @@
+{
+  "name": "@dsafdsaf132/node-gles-webgl2-win32-arm64",
+  "version": "0.3.0",
+  "description": "Bundled ANGLE libraries for node-gles-webgl2 on Windows arm64",
+  "license": "BSD-3-Clause",
+  "os": [
+    "win32"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "LICENSE",
+    "*.dll",
+    "*.lib"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dsafdsaf132/node-gles-webgl2.git"
+  }
+}

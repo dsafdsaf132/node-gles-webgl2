@@ -1,9 +1,9 @@
 .vscode/
 demo/
-deps/angle/*
 scripts/build-npm.sh
 scripts/make-version
 scripts/tag-version
+scripts/set-release-version.js
 build/
 src/
 node_modules/

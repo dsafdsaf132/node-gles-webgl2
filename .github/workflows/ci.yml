@@ -49,9 +49,7 @@ jobs:
       - name: Install dependencies
         run: npm install --ignore-scripts
 
-      - name: Download ANGLE and build addon
-        env:
-          NODE_GLES_GITHUB_TOKEN: ${{ github.token }}
+      - name: Build addon with bundled ANGLE
         run: node scripts/install.js
 
       - name: Stage ANGLE DLLs for Windows smoke tests
@@ -59,7 +57,9 @@ jobs:
         shell: pwsh
         run: |
           $nodeDir = Split-Path -Parent (Get-Command node).Source
-          Copy-Item deps\angle\out\Release\*.dll -Destination $nodeDir -Force
+          $angleDir = node scripts/resolve-angle-path.js
+          Copy-Item "$angleDir\*.dll" `
+            -Destination $nodeDir -Force
 
       - name: Build TypeScript
         run: npm run build
@@ -105,7 +105,7 @@ jobs:
         uses: Vampire/setup-wsl@v7
         with:
           distribution: Ubuntu-24.04
-          update: 'true'
+          update: "true"
           additional-packages: >
             build-essential
             python3
@@ -124,10 +124,8 @@ jobs:
         shell: wsl-bash {0}
         run: npm install --ignore-scripts
 
-      - name: Download ANGLE and build addon under WSL
+      - name: Build addon with bundled ANGLE under WSL
         shell: wsl-bash {0}
-        env:
-          NODE_GLES_GITHUB_TOKEN: ${{ github.token }}
         run: node scripts/install.js
 
       - name: Build TypeScript under WSL

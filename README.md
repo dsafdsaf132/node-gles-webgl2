@@ -132,24 +132,24 @@ npm run build
 ```
 
 From a release source tarball, use the same commands after extracting the
-archive. Source tarballs do not contain `deps/angle`; `node scripts/install.js`
-downloads ANGLE into that directory before building the addon.
+archive.
 
-`scripts/install.js` downloads the latest matching ANGLE prebuilt archive from
-[`dsafdsaf132/angle-prebuilt`](https://github.com/dsafdsaf132/angle-prebuilt)
-into `deps/angle` and builds the native addon with `node-gyp`. If a complete
-ANGLE `out/Release` directory is already present and matches the selected
-release, the installer reuses it.
+ANGLE headers are bundled in the main package. Prebuilt libraries are published
+as platform packages for Linux, macOS, and Windows on x64 and arm64. npm
+automatically installs only the package matching the current platform, so
+installation does not fetch a separate ANGLE release archive.
 
-Installer overrides:
+The platform packages are maintained under `packages/angle-*`.
+`scripts/install.js` validates the selected package and builds the native addon
+with `node-gyp`. The bundled ANGLE revision and platform inventory are recorded
+in `deps/angle/angle-build.json`. ANGLE is distributed under its BSD-style
+license in `deps/angle/LICENSE` and each platform package.
 
-- `NODE_GLES_ANGLE_RELEASE_REPOSITORY`: GitHub release repository, default
-  `dsafdsaf132/angle-prebuilt`
-- `NODE_GLES_ANGLE_RELEASE_TAG`: GitHub release tag, default `latest`
-- `NODE_GLES_ANGLE_VERSION` and `NODE_GLES_ANGLE_BASE_URI`: legacy explicit
-  archive URL mode
-- `NODE_GLES_ANGLE_SHA256`: optional archive checksum verification
-- `NODE_GLES_GITHUB_TOKEN`: optional GitHub API token for release lookups
+The publish workflow releases the six platform packages before the main
+package. The first release requires an npm granular access token in the
+`NPM_TOKEN` repository secret because npm trusted publishing can only be
+configured after a package exists. After bootstrapping, configure `publish.yml`
+as the trusted publisher for each platform package.
 
 On Linux, the native build needs X11 development headers. On Ubuntu:
 
