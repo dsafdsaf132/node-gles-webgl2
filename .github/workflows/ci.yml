@@ -40,7 +40,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22.22.2
+
+      - name: Set up npm
+        run: npm install --global npm@12.0.2
 
       - name: Install native build dependencies
         if: runner.os == 'Linux'
