@@ -63,10 +63,11 @@ backend.
 - `WEBGL_depth_texture`
 - `WEBGL_draw_buffers`
 - `WEBGL_lose_context`
+- `EXT_disjoint_timer_query_webgl2`
 
 ### Not Exposed
 
-- `EXT_disjoint_timer_query` / `EXT_disjoint_timer_query_webgl2`
+- `EXT_disjoint_timer_query` (WebGL1 variant)
 
 ## Install
 

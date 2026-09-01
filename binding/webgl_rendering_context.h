@@ -58,6 +58,8 @@ class WebGLRenderingContext {
   bool HasNativeResources() const;
   bool EnsureNativeContextCurrent() const;
   void QueueError(GLenum error);
+  void EnableEXTDisjointTimerQueryWebGL2();
+  bool IsEXTDisjointTimerQueryWebGL2Enabled() const;
   GLuint GetCurrentProgram() const;
   uint64_t GetContextId() const;
   uint64_t GetProgramGeneration(GLuint program) const;
@@ -128,6 +130,7 @@ class WebGLRenderingContext {
   static napi_value CreateFramebuffer(napi_env env, napi_callback_info info);
   static napi_value CreateProgram(napi_env env, napi_callback_info info);
   static napi_value CreateQuery(napi_env env, napi_callback_info info);
+  static napi_value QueryCounterEXT(napi_env env, napi_callback_info info);
   static napi_value CreateRenderbuffer(napi_env env, napi_callback_info info);
   static napi_value CreateSampler(napi_env env, napi_callback_info info);
   static napi_value CreateShader(napi_env env, napi_callback_info info);
@@ -358,6 +361,7 @@ class WebGLRenderingContext {
   std::string unpack_color_space_;
   PixelStoreState pixel_store_state_;
   bool supports_webgl2_pixel_store_;
+  bool ext_disjoint_timer_query_webgl2_enabled_;
   std::deque<GLenum> pending_errors_;
   bool has_enabled_extensions_filter_;
   std::vector<std::string> enabled_extensions_;

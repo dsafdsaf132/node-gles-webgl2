@@ -111,17 +111,25 @@ jobs:
           update: "true"
           additional-packages: >
             build-essential
+            ca-certificates
+            curl
+            gnupg
             python3
             libx11-dev
             libxext-dev
             xvfb
-            nodejs
-            npm
 
       - name: Check out
         uses: actions/checkout@v4
         with:
           persist-credentials: false
+
+      - name: Set up Node.js under WSL
+        shell: wsl-bash {0}
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+          apt-get install -y nodejs
+          npm install --global --force --no-audit --no-fund npm@12.0.2
 
       - name: Install dependencies under WSL
         shell: wsl-bash {0}

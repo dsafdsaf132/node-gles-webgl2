@@ -82,6 +82,15 @@ export type NodeGlesEXTBlendMinmax = {
   readonly MIN_EXT: number;
 };
 
+export type NodeGlesEXTDisjointTimerQueryWebGL2 = {
+  readonly QUERY_COUNTER_BITS_EXT: number;
+  readonly TIME_ELAPSED_EXT: number;
+  readonly TIMESTAMP_EXT: number;
+  readonly GPU_DISJOINT_EXT: number;
+  queryCounterEXT(query: WebGLNonNullResourceHandle<WebGLQuery>,
+                  target: number): void;
+};
+
 export type NodeGlesEXTColorBufferFloat = {};
 
 export type NodeGlesWEBGLColorBufferFloat = {
@@ -271,6 +280,8 @@ export type NodeGlesWebGL2RenderingContext = WebGL2RenderingContext & {
     NodeGlesANGLEInstancedArrays | null;
   getExtension(extensionName: "EXT_blend_minmax"):
     NodeGlesEXTBlendMinmax | null;
+  getExtension(extensionName: "EXT_disjoint_timer_query_webgl2"):
+    NodeGlesEXTDisjointTimerQueryWebGL2 | null;
   getExtension(extensionName: "EXT_color_buffer_float"):
     NodeGlesEXTColorBufferFloat | null;
   getExtension(extensionName: "WEBGL_color_buffer_float"):
