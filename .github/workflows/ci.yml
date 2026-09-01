@@ -43,7 +43,7 @@ jobs:
           node-version: 24.15.0
 
       - name: Set up npm
-        run: npm install --global npm@12.0.2
+        run: npm install --global --force --no-audit --no-fund npm@12.0.2
 
       - name: Install native build dependencies
         if: runner.os == 'Linux'
