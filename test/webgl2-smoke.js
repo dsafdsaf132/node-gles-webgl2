@@ -496,6 +496,7 @@ function testDisjointTimerQueryWebGL2(gl) {
       gl.getQueryParameter(elapsedQuery, gl.QUERY_RESULT) >= 0,
       "elapsed query should return a non-negative value");
   gl.deleteQuery(elapsedQuery);
+  gl.clearColor(0, 0, 0, 0);
   assertNoError(gl, "EXT_disjoint_timer_query_webgl2");
 }
 
