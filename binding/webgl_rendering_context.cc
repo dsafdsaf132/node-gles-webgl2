@@ -2308,6 +2308,7 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
       eglContextWrapper_(nullptr),
       drawing_buffer_color_space_("srgb"),
       unpack_color_space_("srgb"),
+      ext_disjoint_timer_query_webgl2_enabled_(false),
       has_enabled_extensions_filter_(opts.has_enabled_extensions_filter),
       enabled_extensions_(opts.enabled_extensions),
       disabled_extensions_(opts.disabled_extensions),
@@ -2343,6 +2344,14 @@ WebGLRenderingContext::WebGLRenderingContext(napi_env env,
 
 bool WebGLRenderingContext::HasNativeResources() const {
   return eglContextWrapper_ != nullptr;
+}
+
+void WebGLRenderingContext::EnableEXTDisjointTimerQueryWebGL2() {
+  ext_disjoint_timer_query_webgl2_enabled_ = true;
+}
+
+bool WebGLRenderingContext::IsEXTDisjointTimerQueryWebGL2Enabled() const {
+  return ext_disjoint_timer_query_webgl2_enabled_;
 }
 
 bool WebGLRenderingContext::EnsureNativeContextCurrent() const {
@@ -5125,7 +5134,8 @@ napi_value WebGLRenderingContext::QueryCounterEXT(napi_env env,
   napi_status nstatus = GetContextUint32Params(env, info, &context, 2, args);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   ENSURE_GL_PROC_RETVAL(env, context, glQueryCounterEXT, nullptr);
-  if (args[1] != GL_TIMESTAMP_EXT) {
+  if (!context->IsEXTDisjointTimerQueryWebGL2Enabled() ||
+      args[1] != GL_TIMESTAMP_EXT) {
     QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
                     GL_INVALID_ENUM);
     return nullptr;
@@ -6589,7 +6599,8 @@ static napi_status NewWEBGLDrawBuffers(napi_env env, napi_value js_this,
 }
 
 static bool SupportsEXTDisjointTimerQueryWebGL2(EGLContextWrapper *egl_ctx) {
-  return egl_ctx->glQueryCounterEXT != nullptr &&
+  return egl_ctx->client_major_es_version >= 3 &&
+         egl_ctx->glQueryCounterEXT != nullptr &&
          egl_ctx->glGetQueryivEXT != nullptr &&
          egl_ctx->glGetQueryObjectui64vEXT != nullptr &&
          egl_ctx->glGetInteger64vEXT != nullptr &&
@@ -6601,8 +6612,10 @@ static bool SupportsEXTDisjointTimerQueryWebGL2(EGLContextWrapper *egl_ctx) {
 static napi_status NewEXTDisjointTimerQueryWebGL2(
     napi_env env, napi_value js_this, EGLContextWrapper *egl_ctx,
     napi_value *extension) {
-  (void)egl_ctx;
-  napi_status nstatus = napi_create_object(env, extension);
+  WebGLRenderingContext *context = nullptr;
+  napi_status nstatus = UnwrapContext(env, js_this, &context);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = napi_create_object(env, extension);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
   nstatus = SetIntConstant(env, *extension, "QUERY_COUNTER_BITS_EXT",
                            GL_QUERY_COUNTER_BITS_EXT);
@@ -6620,6 +6633,7 @@ static napi_status NewEXTDisjointTimerQueryWebGL2(
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
   egl_ctx->glRequestExtensionANGLE("GL_EXT_disjoint_timer_query");
   egl_ctx->RefreshGLExtensions();
+  context->EnableEXTDisjointTimerQueryWebGL2();
   return napi_ok;
 }
 
@@ -7133,7 +7147,8 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     }
 
     case GL_GPU_DISJOINT_EXT: {
-      if (!context->IsExtensionAllowed("EXT_disjoint_timer_query_webgl2") ||
+      if (!context->IsEXTDisjointTimerQueryWebGL2Enabled() ||
+          !context->IsExtensionAllowed("EXT_disjoint_timer_query_webgl2") ||
           !SupportsEXTDisjointTimerQueryWebGL2(context->eglContextWrapper_)) {
         QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
                         GL_INVALID_ENUM);
@@ -7152,7 +7167,8 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
     }
 
     case GL_TIMESTAMP_EXT: {
-      if (!context->IsExtensionAllowed("EXT_disjoint_timer_query_webgl2") ||
+      if (!context->IsEXTDisjointTimerQueryWebGL2Enabled() ||
+          !context->IsExtensionAllowed("EXT_disjoint_timer_query_webgl2") ||
           !SupportsEXTDisjointTimerQueryWebGL2(context->eglContextWrapper_)) {
         QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
                         GL_INVALID_ENUM);
@@ -8077,8 +8093,9 @@ napi_value WebGLRenderingContext::GetQuery(napi_env env,
   const bool valid_pname = args[1] == GL_CURRENT_QUERY ||
                            (timer_query && args[1] == GL_QUERY_COUNTER_BITS_EXT);
   if (!context->supports_webgl2_pixel_store_ || !valid_target || !valid_pname ||
-      (timer_query && !SupportsEXTDisjointTimerQueryWebGL2(
-                           context->eglContextWrapper_))) {
+      (timer_query &&
+       (!context->IsEXTDisjointTimerQueryWebGL2Enabled() ||
+        !SupportsEXTDisjointTimerQueryWebGL2(context->eglContextWrapper_)))) {
     QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
                     GL_INVALID_ENUM);
     napi_value null_value;
@@ -8088,6 +8105,8 @@ napi_value WebGLRenderingContext::GetQuery(napi_env env,
   }
 
   if (args[0] == GL_TIMESTAMP_EXT && args[1] == GL_CURRENT_QUERY) {
+    QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                    GL_INVALID_ENUM);
     napi_value null_value;
     nstatus = napi_get_null(env, &null_value);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
@@ -8122,6 +8141,7 @@ napi_value WebGLRenderingContext::GetQueryParameter(napi_env env,
 
   GLuint param = 0;
   if (args[1] == GL_QUERY_RESULT &&
+      context->IsEXTDisjointTimerQueryWebGL2Enabled() &&
       SupportsEXTDisjointTimerQueryWebGL2(context->eglContextWrapper_)) {
     GLuint64 result = 0;
     context->eglContextWrapper_->glGetQueryObjectui64vEXT(args[0], args[1],

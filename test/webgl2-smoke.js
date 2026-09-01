@@ -488,6 +488,9 @@ function testDisjointTimerQueryWebGL2(gl) {
   assert.strictEqual(
       gl.getQuery(ext.TIME_ELAPSED_EXT, gl.CURRENT_QUERY), null);
   assert.strictEqual(
+      gl.getQuery(ext.TIMESTAMP_EXT, gl.CURRENT_QUERY), null);
+  assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+  assert.strictEqual(
       gl.getQuery(ext.TIME_ELAPSED_EXT, ext.QUERY_COUNTER_BITS_EXT) > 0, true);
   gl.finish();
   assert.strictEqual(
@@ -498,6 +501,38 @@ function testDisjointTimerQueryWebGL2(gl) {
   gl.deleteQuery(elapsedQuery);
   gl.clearColor(0, 0, 0, 0);
   assertNoError(gl, "EXT_disjoint_timer_query_webgl2");
+}
+
+function testDisjointTimerQueryWebGL2Gating() {
+  const gl = createContext();
+  try {
+    assert.strictEqual(gl.getParameter(0x8FBB), null);
+    assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+    assert.strictEqual(gl.getParameter(0x8E28), null);
+    assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+    assert.strictEqual(gl.getQuery(0x88BF, gl.CURRENT_QUERY), null);
+    assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+
+    const query = gl.createQuery();
+    gl.queryCounterEXT(query, 0x8E28);
+    assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
+    gl.deleteQuery(query);
+  } finally {
+    gl.destroy();
+  }
+
+  const es2 = createContext({majorVersion: 2});
+  try {
+    if (/OpenGL ES 2\./.test(es2.getParameter(es2.VERSION))) {
+      assert(!es2.getSupportedExtensions().includes(
+          "EXT_disjoint_timer_query_webgl2"));
+      assert.strictEqual(
+          es2.getExtension("EXT_disjoint_timer_query_webgl2"), null);
+      assert.strictEqual(es2.getError(), es2.NO_ERROR);
+    }
+  } finally {
+    es2.destroy();
+  }
 }
 
 function assertDebugRendererRawEnumsBlocked(gl, label) {
@@ -3266,6 +3301,7 @@ testRequiredWebGL2Methods(gl);
 testSupportedExtensionsReflectGetExtension(gl);
 testCompressedTextureS3TC(gl);
 testDisjointTimerQueryWebGL2(gl);
+testDisjointTimerQueryWebGL2Gating();
 testExtensionCreationOptions();
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
