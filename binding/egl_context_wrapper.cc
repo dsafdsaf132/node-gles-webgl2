@@ -566,8 +566,16 @@ void EGLContextWrapper::BindProcAddresses() {
       eglGetProcAddress("glGetProgramInfoLog"));
   glGetQueryiv =
       reinterpret_cast<PFNGLGETQUERYIVPROC>(eglGetProcAddress("glGetQueryiv"));
+  glGetQueryivEXT = reinterpret_cast<PFNGLGETQUERYIVEXTPROC>(
+      eglGetProcAddress("glGetQueryivEXT"));
   glGetQueryObjectuiv = reinterpret_cast<PFNGLGETQUERYOBJECTUIVPROC>(
       eglGetProcAddress("glGetQueryObjectuiv"));
+  glQueryCounterEXT = reinterpret_cast<PFNGLQUERYCOUNTEREXTPROC>(
+      eglGetProcAddress("glQueryCounterEXT"));
+  glGetQueryObjectui64vEXT = reinterpret_cast<PFNGLGETQUERYOBJECTUI64VEXTPROC>(
+      eglGetProcAddress("glGetQueryObjectui64vEXT"));
+  glGetInteger64vEXT = reinterpret_cast<PFNGLGETINTEGER64VEXTPROC>(
+      eglGetProcAddress("glGetInteger64vEXT"));
   glGetRenderbufferParameteriv =
       reinterpret_cast<PFNGLGETRENDERBUFFERPARAMETERIVPROC>(
           eglGetProcAddress("glGetRenderbufferParameteriv"));

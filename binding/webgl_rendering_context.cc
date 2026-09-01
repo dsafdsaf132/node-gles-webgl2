@@ -2445,6 +2445,7 @@ napi_status WebGLRenderingContext::Register(napi_env env, napi_value exports) {
       NAPI_DEFINE_METHOD("createFramebuffer", CreateFramebuffer),
       NAPI_DEFINE_METHOD("createProgram", CreateProgram),
       NAPI_DEFINE_METHOD("createQuery", CreateQuery),
+      NAPI_DEFINE_METHOD("queryCounterEXT", QueryCounterEXT),
       NAPI_DEFINE_METHOD("createRenderbuffer", CreateRenderbuffer),
       NAPI_DEFINE_METHOD("createSampler", CreateSampler),
       NAPI_DEFINE_METHOD("createShader", CreateShader),
@@ -5116,6 +5117,27 @@ napi_value WebGLRenderingContext::CreateQuery(napi_env env,
 }
 
 /* static */
+napi_value WebGLRenderingContext::QueryCounterEXT(napi_env env,
+                                                  napi_callback_info info) {
+  LOG_CALL("QueryCounterEXT");
+  WebGLRenderingContext *context = nullptr;
+  uint32_t args[2];
+  napi_status nstatus = GetContextUint32Params(env, info, &context, 2, args);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  ENSURE_GL_PROC_RETVAL(env, context, glQueryCounterEXT, nullptr);
+  if (args[1] != GL_TIMESTAMP_EXT) {
+    QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                    GL_INVALID_ENUM);
+    return nullptr;
+  }
+  context->eglContextWrapper_->glQueryCounterEXT(args[0], args[1]);
+#if DEBUG
+  context->CheckForErrors();
+#endif
+  return nullptr;
+}
+
+/* static */
 napi_value WebGLRenderingContext::CreateRenderbuffer(napi_env env,
                                                      napi_callback_info info) {
   LOG_CALL("CreateRenderBuffer");
@@ -6566,6 +6588,41 @@ static napi_status NewWEBGLDrawBuffers(napi_env env, napi_value js_this,
   return CreateWEBGLDrawBuffersAlias(env, js_this, extension);
 }
 
+static bool SupportsEXTDisjointTimerQueryWebGL2(EGLContextWrapper *egl_ctx) {
+  return egl_ctx->glQueryCounterEXT != nullptr &&
+         egl_ctx->glGetQueryivEXT != nullptr &&
+         egl_ctx->glGetQueryObjectui64vEXT != nullptr &&
+         egl_ctx->glGetInteger64vEXT != nullptr &&
+         (egl_ctx->gl_extensions->HasExtension("GL_EXT_disjoint_timer_query") ||
+          egl_ctx->angle_requestable_extensions->HasExtension(
+              "GL_EXT_disjoint_timer_query"));
+}
+
+static napi_status NewEXTDisjointTimerQueryWebGL2(
+    napi_env env, napi_value js_this, EGLContextWrapper *egl_ctx,
+    napi_value *extension) {
+  (void)egl_ctx;
+  napi_status nstatus = napi_create_object(env, extension);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetIntConstant(env, *extension, "QUERY_COUNTER_BITS_EXT",
+                           GL_QUERY_COUNTER_BITS_EXT);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetIntConstant(env, *extension, "TIME_ELAPSED_EXT",
+                           GL_TIME_ELAPSED_EXT);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetIntConstant(env, *extension, "TIMESTAMP_EXT", GL_TIMESTAMP_EXT);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetIntConstant(env, *extension, "GPU_DISJOINT_EXT",
+                           GL_GPU_DISJOINT_EXT);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  nstatus = SetBoundMethodAlias(env, *extension, js_this, "queryCounterEXT",
+                                "queryCounterEXT");
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  egl_ctx->glRequestExtensionANGLE("GL_EXT_disjoint_timer_query");
+  egl_ctx->RefreshGLExtensions();
+  return napi_ok;
+}
+
 #define DEFINE_EXTENSION_DESCRIPTOR_HELPERS(helper_name, class_name)    \
   static bool Supports##helper_name(EGLContextWrapper *egl_ctx) {       \
     return class_name::IsSupported(egl_ctx);                            \
@@ -6669,6 +6726,8 @@ static const WebGLExtensionDescriptor kKnownWebGLExtensions[] = {
     {"WEBGL_compressed_texture_s3tc_srgb",
      SupportsWebGLCompressedTextureS3TCSRGB, NewWebGLCompressedTextureS3TCSRGB},
     {"WEBGL_draw_buffers", SupportsWEBGLDrawBuffers, NewWEBGLDrawBuffers},
+    {"EXT_disjoint_timer_query_webgl2", SupportsEXTDisjointTimerQueryWebGL2,
+     NewEXTDisjointTimerQueryWebGL2},
     {"WEBGL_lose_context", WebGLLoseContextExtension::IsSupported,
      NewWebGLLoseContext},
 };
@@ -7071,6 +7130,45 @@ napi_value WebGLRenderingContext::GetParameter(napi_env env,
         return str_value;
       }
       break;
+    }
+
+    case GL_GPU_DISJOINT_EXT: {
+      if (!context->IsExtensionAllowed("EXT_disjoint_timer_query_webgl2") ||
+          !SupportsEXTDisjointTimerQueryWebGL2(context->eglContextWrapper_)) {
+        QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                        GL_INVALID_ENUM);
+        napi_value null_value;
+        nstatus = napi_get_null(env, &null_value);
+        ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+        return null_value;
+      }
+      GLint disjoint = 0;
+      context->eglContextWrapper_->glGetIntegerv(GL_GPU_DISJOINT_EXT,
+                                                 &disjoint);
+      napi_value disjoint_value;
+      nstatus = napi_get_boolean(env, disjoint != 0, &disjoint_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return disjoint_value;
+    }
+
+    case GL_TIMESTAMP_EXT: {
+      if (!context->IsExtensionAllowed("EXT_disjoint_timer_query_webgl2") ||
+          !SupportsEXTDisjointTimerQueryWebGL2(context->eglContextWrapper_)) {
+        QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
+                        GL_INVALID_ENUM);
+        napi_value null_value;
+        nstatus = napi_get_null(env, &null_value);
+        ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+        return null_value;
+      }
+      GLint64 timestamp = 0;
+      context->eglContextWrapper_->glGetInteger64vEXT(GL_TIMESTAMP_EXT,
+                                                      &timestamp);
+      napi_value timestamp_value;
+      nstatus = napi_create_double(env, static_cast<double>(timestamp),
+                                   &timestamp_value);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      return timestamp_value;
     }
 
     case kUnmaskedVendorWebGL:
@@ -7971,9 +8069,16 @@ napi_value WebGLRenderingContext::GetQuery(napi_env env,
 
   const bool valid_target = args[0] == GL_ANY_SAMPLES_PASSED ||
                             args[0] == GL_ANY_SAMPLES_PASSED_CONSERVATIVE ||
-                            args[0] == GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN;
-  if (!context->supports_webgl2_pixel_store_ || !valid_target ||
-      args[1] != GL_CURRENT_QUERY) {
+                            args[0] == GL_TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN ||
+                            args[0] == GL_TIME_ELAPSED_EXT ||
+                            args[0] == GL_TIMESTAMP_EXT;
+  const bool timer_query = args[0] == GL_TIME_ELAPSED_EXT ||
+                           args[0] == GL_TIMESTAMP_EXT;
+  const bool valid_pname = args[1] == GL_CURRENT_QUERY ||
+                           (timer_query && args[1] == GL_QUERY_COUNTER_BITS_EXT);
+  if (!context->supports_webgl2_pixel_store_ || !valid_target || !valid_pname ||
+      (timer_query && !SupportsEXTDisjointTimerQueryWebGL2(
+                           context->eglContextWrapper_))) {
     QueueWebGLError(context->eglContextWrapper_, &context->pending_errors_,
                     GL_INVALID_ENUM);
     napi_value null_value;
@@ -7982,8 +8087,19 @@ napi_value WebGLRenderingContext::GetQuery(napi_env env,
     return null_value;
   }
 
+  if (args[0] == GL_TIMESTAMP_EXT && args[1] == GL_CURRENT_QUERY) {
+    napi_value null_value;
+    nstatus = napi_get_null(env, &null_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return null_value;
+  }
+
   GLint param = 0;
-  context->eglContextWrapper_->glGetQueryiv(args[0], args[1], &param);
+  if (timer_query) {
+    context->eglContextWrapper_->glGetQueryivEXT(args[0], args[1], &param);
+  } else {
+    context->eglContextWrapper_->glGetQueryiv(args[0], args[1], &param);
+  }
   napi_value param_value;
   if (args[1] == GL_CURRENT_QUERY && param == 0) {
     nstatus = napi_get_null(env, &param_value);
@@ -8005,6 +8121,17 @@ napi_value WebGLRenderingContext::GetQueryParameter(napi_env env,
   ENSURE_GL_PROC_RETVAL(env, context, glGetQueryObjectuiv, nullptr);
 
   GLuint param = 0;
+  if (args[1] == GL_QUERY_RESULT &&
+      SupportsEXTDisjointTimerQueryWebGL2(context->eglContextWrapper_)) {
+    GLuint64 result = 0;
+    context->eglContextWrapper_->glGetQueryObjectui64vEXT(args[0], args[1],
+                                                          &result);
+    napi_value result_value;
+    nstatus = napi_create_double(env, static_cast<double>(result),
+                                 &result_value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    return result_value;
+  }
   context->eglContextWrapper_->glGetQueryObjectuiv(args[0], args[1], &param);
   napi_value param_value;
   if (args[1] == GL_QUERY_RESULT_AVAILABLE) {

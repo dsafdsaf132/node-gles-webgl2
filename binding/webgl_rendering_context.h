@@ -128,6 +128,7 @@ class WebGLRenderingContext {
   static napi_value CreateFramebuffer(napi_env env, napi_callback_info info);
   static napi_value CreateProgram(napi_env env, napi_callback_info info);
   static napi_value CreateQuery(napi_env env, napi_callback_info info);
+  static napi_value QueryCounterEXT(napi_env env, napi_callback_info info);
   static napi_value CreateRenderbuffer(napi_env env, napi_callback_info info);
   static napi_value CreateSampler(napi_env env, napi_callback_info info);
   static napi_value CreateShader(napi_env env, napi_callback_info info);

@@ -293,6 +293,7 @@ function testSupportedExtensionsReflectGetExtension(gl) {
   const knownExtensions = [
     "ANGLE_instanced_arrays",
     "EXT_blend_minmax",
+    "EXT_disjoint_timer_query_webgl2",
     "EXT_color_buffer_float",
     "WEBGL_color_buffer_float",
     "EXT_color_buffer_half_float",
@@ -450,6 +451,52 @@ function testCompressedTextureS3TC(gl) {
   }
   gl.deleteTexture(srgbTexture);
   assertNoError(gl, "WEBGL_compressed_texture_s3tc_srgb smoke");
+}
+
+function testDisjointTimerQueryWebGL2(gl) {
+  const supported = gl.getSupportedExtensions();
+  const ext = gl.getExtension("EXT_disjoint_timer_query_webgl2");
+  assert.strictEqual(
+      supported.includes("EXT_disjoint_timer_query_webgl2"), ext !== null,
+      "timer query support should match getExtension");
+  if (!ext) {
+    return;
+  }
+
+  assert.strictEqual(ext.TIME_ELAPSED_EXT, 0x88BF);
+  assert.strictEqual(ext.TIMESTAMP_EXT, 0x8E28);
+  assert.strictEqual(ext.GPU_DISJOINT_EXT, 0x8FBB);
+  assert.strictEqual(typeof ext.queryCounterEXT, "function");
+  assert.strictEqual(typeof gl.getParameter(ext.GPU_DISJOINT_EXT), "boolean");
+  assert.strictEqual(typeof gl.getParameter(ext.TIMESTAMP_EXT), "number");
+
+  const query = gl.createQuery();
+  ext.queryCounterEXT(query, ext.TIMESTAMP_EXT);
+  gl.finish();
+  assert.strictEqual(
+      gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE), true);
+  const timestamp = gl.getQueryParameter(query, gl.QUERY_RESULT);
+  assert.strictEqual(typeof timestamp, "number");
+  assert(timestamp > 0, "timestamp query should return a positive value");
+  gl.deleteQuery(query);
+
+  const elapsedQuery = gl.createQuery();
+  gl.beginQuery(ext.TIME_ELAPSED_EXT, elapsedQuery);
+  gl.clearColor(0.25, 0.5, 0.75, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.endQuery(ext.TIME_ELAPSED_EXT);
+  assert.strictEqual(
+      gl.getQuery(ext.TIME_ELAPSED_EXT, gl.CURRENT_QUERY), null);
+  assert.strictEqual(
+      gl.getQuery(ext.TIME_ELAPSED_EXT, ext.QUERY_COUNTER_BITS_EXT) > 0, true);
+  gl.finish();
+  assert.strictEqual(
+      gl.getQueryParameter(elapsedQuery, gl.QUERY_RESULT_AVAILABLE), true);
+  assert(
+      gl.getQueryParameter(elapsedQuery, gl.QUERY_RESULT) >= 0,
+      "elapsed query should return a non-negative value");
+  gl.deleteQuery(elapsedQuery);
+  assertNoError(gl, "EXT_disjoint_timer_query_webgl2");
 }
 
 function assertDebugRendererRawEnumsBlocked(gl, label) {
@@ -3217,6 +3264,7 @@ console.log(gl.getParameter(gl.VERSION));
 testRequiredWebGL2Methods(gl);
 testSupportedExtensionsReflectGetExtension(gl);
 testCompressedTextureS3TC(gl);
+testDisjointTimerQueryWebGL2(gl);
 testExtensionCreationOptions();
 testUnsupportedExtensionDoesNotWriteStderr();
 testInfoLogEmptyStrings(gl);
