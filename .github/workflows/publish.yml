@@ -27,7 +27,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 22.22.2
+          node-version: 24.15.0
           registry-url: https://registry.npmjs.org
 
       - name: Set up npm for trusted publishing
@@ -160,7 +160,7 @@ jobs:
       - name: Set up Node.js for GitHub Packages
         uses: actions/setup-node@v4
         with:
-          node-version: 22.22.2
+          node-version: 24.15.0
           registry-url: https://npm.pkg.github.com
           scope: "@dsafdsaf132"
 
