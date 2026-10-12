@@ -67,6 +67,30 @@ function validateBundledAngle() {
         `Bundled ANGLE files are missing for ${platform}-${arch}:\n` +
         missingFiles.map(file => `  ${file}`).join('\n'));
   }
+  if (platform === 'linux') {
+    for (const name of ['libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so']) {
+      const filename = path.join(angleReleasePath, name);
+      const header = Buffer.alloc(20);
+      const fd = fs.openSync(filename, 'r');
+      let bytesRead;
+      try {
+        bytesRead = fs.readSync(fd, header, 0, header.length, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      const machine = arch === 'x64' ? 62 : 183;
+      if (bytesRead !== header.length ||
+          header.readUInt32BE(0) !== 0x7f454c46 ||
+          header[4] !== 2 || header[5] !== 1 || header[6] !== 1 ||
+          header.readUInt16LE(16) !== 3 ||
+          header.readUInt16LE(18) !== machine) {
+        throw new Error(
+            `Invalid ANGLE library for linux-${arch}: ${filename}. ` +
+            'Expected a 64-bit little-endian ELF shared library. ' +
+            'Reinstall the platform package or restore the bundled libraries.');
+      }
+    }
+  }
   console.error(`* Using bundled ANGLE for ${platform}-${arch}`);
 }
 
@@ -91,8 +115,13 @@ function buildBindings() {
   try {
     cp.execSync('node-gyp rebuild', {stdio: 'inherit'});
   } catch (err) {
-    console.error('* node-gyp failed, retrying with npx node-gyp');
-    cp.execSync('npx --yes node-gyp rebuild', {stdio: 'inherit'});
+    // Keep the fallback compatible with the supported Node releases rather
+    // than downloading a future node-gyp with a higher Node requirement.
+    const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
+    const gypVersion = nodeMajor >= 18 ||
+        (nodeMajor === 16 && nodeMinor >= 14) ? '10.3.1' : '8.4.1';
+    console.error(`* node-gyp failed, retrying with node-gyp@${gypVersion}`);
+    cp.execSync(`npx --yes node-gyp@${gypVersion} rebuild`, {stdio: 'inherit'});
   }
   copyRequiredWindowsDlls();
 }
