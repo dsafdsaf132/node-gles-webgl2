@@ -149,8 +149,9 @@ license in `deps/angle/LICENSE` and each platform package.
 The bundled dev build includes Vulkan and SwiftShader on all six platforms;
 macOS also includes the Metal backend. Each platform package contains its
 original `angle-build.json`, SwiftShader library, ICD manifest, and license.
-The source build run is recorded in `deps/angle/angle-build.json` because the
-release-tag archives may predate the SwiftShader rebuild.
+The bundled release and source build run are recorded in
+`deps/angle/angle-build.json`. The Windows prebuilts include the SwiftShader ICD
+path fix required when Node.js loads DLLs through extended-length paths.
 
 For software rendering without a GPU or X server, select SwiftShader before
 starting Node.js:

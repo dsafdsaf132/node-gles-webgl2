@@ -6,7 +6,7 @@
   "channel": "dev",
   "chromeVersion": "",
   "chromiumCommit": "",
-  "generatedAt": "2026-10-11T21:52:04Z",
+  "generatedAt": "2026-10-12T12:19:08Z",
   "gnArgs": {
     "angle_build_all": false,
     "angle_build_tests": false,
@@ -54,12 +54,12 @@
     "use_sysroot": false
   },
   "platform": "linux",
-  "releaseDate": "2026-10-11",
-  "releaseTag": "angle-dev-2026-10-11-4bbd983",
-  "releaseTitle": "Dev \u00b7 2026-10-11",
+  "releaseDate": "2026-10-12",
+  "releaseTag": "angle-dev-2026-10-12-4bbd983",
+  "releaseTitle": "Dev \u00b7 2026-10-12",
   "shared": true,
   "sourceUrl": "https://chromium.googlesource.com/angle/angle/+/4bbd98390e404956c34010632f6d3e260c4f8057/",
-  "tagCommit": "f74e5d77ca00e33e1e2e11ebd4aaf32e52a65360",
+  "tagCommit": "697a817c6b2bd478c989e4e76c21e892cfc520bd",
   "upstreamCommit": "4bbd98390e404956c34010632f6d3e260c4f8057",
-  "workflowCommit": "5fdeca468c31e85de9642358b95a2516e5ad3371"
+  "workflowCommit": "697a817c6b2bd478c989e4e76c21e892cfc520bd"
 }

@@ -470,6 +470,14 @@ function testDisjointTimerQueryWebGL2(gl) {
   assert.strictEqual(typeof gl.getParameter(ext.GPU_DISJOINT_EXT), "boolean");
   assert.strictEqual(typeof gl.getParameter(ext.TIMESTAMP_EXT), "number");
 
+  const timestampBits = gl.getQuery(ext.TIMESTAMP_EXT, ext.QUERY_COUNTER_BITS_EXT);
+  const elapsedBits = gl.getQuery(ext.TIME_ELAPSED_EXT, ext.QUERY_COUNTER_BITS_EXT);
+  for (const bits of [timestampBits, elapsedBits]) {
+    assert(Number.isInteger(bits) && (bits === 0 || (bits >= 30 && bits <= 64)),
+        "timer counter bits should be zero or between 30 and 64");
+  }
+  gl.getParameter(ext.GPU_DISJOINT_EXT); // Start the timestamp validity interval.
+
   const query = gl.createQuery();
   ext.queryCounterEXT(query, ext.TIMESTAMP_EXT);
   gl.finish();
@@ -477,7 +485,13 @@ function testDisjointTimerQueryWebGL2(gl) {
       gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE), true);
   const timestamp = gl.getQueryParameter(query, gl.QUERY_RESULT);
   assert.strictEqual(typeof timestamp, "number");
-  assert(timestamp > 0, "timestamp query should return a positive value");
+  const timestampDisjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
+  // EXT_disjoint_timer_query permits zero-bit counters (e.g. D3D11 timestamps).
+  if (timestampBits === 0) {
+    assert.strictEqual(timestamp, 0, "zero-bit timestamp counters should return zero");
+  } else if (!timestampDisjoint) {
+    assert(timestamp > 0, "timestamp query should return a positive value");
+  }
   gl.deleteQuery(query);
 
   const elapsedQuery = gl.createQuery();
@@ -490,14 +504,17 @@ function testDisjointTimerQueryWebGL2(gl) {
   assert.strictEqual(
       gl.getQuery(ext.TIMESTAMP_EXT, gl.CURRENT_QUERY), null);
   assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
-  assert.strictEqual(
-      gl.getQuery(ext.TIME_ELAPSED_EXT, ext.QUERY_COUNTER_BITS_EXT) > 0, true);
   gl.finish();
   assert.strictEqual(
       gl.getQueryParameter(elapsedQuery, gl.QUERY_RESULT_AVAILABLE), true);
-  assert(
-      gl.getQueryParameter(elapsedQuery, gl.QUERY_RESULT) >= 0,
-      "elapsed query should return a non-negative value");
+  const elapsed = gl.getQueryParameter(elapsedQuery, gl.QUERY_RESULT);
+  assert.strictEqual(typeof elapsed, "number");
+  const elapsedDisjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
+  if (elapsedBits === 0) {
+    assert.strictEqual(elapsed, 0, "zero-bit elapsed counters should return zero");
+  } else if (!elapsedDisjoint) {
+    assert(elapsed >= 0, "elapsed query should return a non-negative value");
+  }
   gl.deleteQuery(elapsedQuery);
   gl.clearColor(0, 0, 0, 0);
   assertNoError(gl, "EXT_disjoint_timer_query_webgl2");
@@ -1067,7 +1084,8 @@ function testBufferCopyAndReadback(gl) {
       gl.COPY_READ_BUFFER, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
       gl.STATIC_DRAW);
   gl.bindBuffer(gl.COPY_WRITE_BUFFER, destination);
-  gl.bufferData(gl.COPY_WRITE_BUFFER, 8, gl.DYNAMIC_READ);
+  // Default contexts use GLES semantics: size-only storage is uninitialized.
+  gl.bufferData(gl.COPY_WRITE_BUFFER, new Uint8Array(8), gl.DYNAMIC_READ);
   gl.copyBufferSubData(gl.COPY_READ_BUFFER, gl.COPY_WRITE_BUFFER, 2, 1, 4);
 
   const full = new Uint8Array(8);
