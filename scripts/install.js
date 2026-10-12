@@ -118,8 +118,14 @@ function buildBindings() {
     // Keep the fallback compatible with the supported Node releases rather
     // than downloading a future node-gyp with a higher Node requirement.
     const [nodeMajor, nodeMinor] = process.versions.node.split('.').map(Number);
-    const gypVersion = nodeMajor >= 18 ||
-        (nodeMajor === 16 && nodeMinor >= 14) ? '10.3.1' : '8.4.1';
+    // node-gyp 12 supports Visual Studio 2026 and requires Node 20.17 or
+    // 22.9+. Older runtimes must retain a compatible fallback.
+    const supportsGyp12 = nodeMajor >= 23 ||
+        (nodeMajor === 22 && nodeMinor >= 9) ||
+        (nodeMajor === 20 && nodeMinor >= 17);
+    const gypVersion = supportsGyp12 ? '12.3.0' :
+        nodeMajor >= 18 || (nodeMajor === 16 && nodeMinor >= 14) ?
+        '10.3.1' : '8.4.1';
     console.error(`* node-gyp failed, retrying with node-gyp@${gypVersion}`);
     cp.execSync(`npx --yes node-gyp@${gypVersion} rebuild`, {stdio: 'inherit'});
   }
