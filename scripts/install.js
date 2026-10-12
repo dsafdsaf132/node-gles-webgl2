@@ -48,12 +48,14 @@ function requiredAngleFiles() {
   let libraries;
   if (platform === 'win32') {
     libraries =
-        ['libEGL.dll', 'libGLESv2.dll', 'libEGL.lib', 'libGLESv2.lib'];
+        ['libEGL.dll', 'libGLESv2.dll', 'libEGL.lib', 'libGLESv2.lib',
+         'vk_swiftshader.dll', 'vulkan-1.dll'];
   } else if (platform === 'darwin') {
-    libraries = ['libEGL.dylib', 'libGLESv2.dylib'];
+    libraries = ['libEGL.dylib', 'libGLESv2.dylib', 'libvk_swiftshader.dylib'];
   } else {
-    libraries = ['libEGL.so', 'libGLESv2.so'];
+    libraries = ['libEGL.so', 'libGLESv2.so', 'libvk_swiftshader.so'];
   }
+  libraries.push('vk_swiftshader_icd.json');
   return headers.map(file => path.join(anglePath, file))
       .concat(libraries.map(file => path.join(angleReleasePath, file)));
 }
@@ -75,7 +77,8 @@ function copyRequiredWindowsDlls() {
   const buildReleasePath = path.join(__dirname, '..', 'build', 'Release');
   fs.mkdirSync(buildReleasePath, {recursive: true});
   for (const dllName of
-    ['libEGL.dll', 'libGLESv2.dll', 'd3dcompiler_47.dll']) {
+    ['libEGL.dll', 'libGLESv2.dll', 'd3dcompiler_47.dll',
+     'vulkan-1.dll', 'vk_swiftshader.dll', 'vk_swiftshader_icd.json']) {
     const source = path.join(angleReleasePath, dllName);
     if (fs.existsSync(source)) {
       fs.copyFileSync(source, path.join(buildReleasePath, dllName));

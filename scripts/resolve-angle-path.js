@@ -14,18 +14,19 @@ const platformKey = `${platform}-${arch}`;
 const packageName = `@dsafdsaf132/node-gles-webgl2-${platformKey}`;
 
 function resolveAnglePath() {
+  // Source checkouts must use their bundled revision, not an older npm release.
+  const repositoryPath =
+      path.join(__dirname, '..', 'packages', `angle-${platformKey}`);
+  if (fs.existsSync(path.join(repositoryPath, 'package.json'))) {
+    return repositoryPath;
+  }
+
   try {
     return path.dirname(require.resolve(`${packageName}/package.json`));
   } catch (err) {
     if (err.code !== 'MODULE_NOT_FOUND') {
       throw err;
     }
-  }
-
-  const repositoryPath =
-      path.join(__dirname, '..', 'packages', `angle-${platformKey}`);
-  if (fs.existsSync(path.join(repositoryPath, 'package.json'))) {
-    return repositoryPath;
   }
 
   throw new Error(

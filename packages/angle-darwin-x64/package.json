@@ -11,6 +11,9 @@
   ],
   "files": [
     "LICENSE",
+    "SWIFTSHADER_LICENSE.txt",
+    "angle-build.json",
+    "vk_swiftshader_icd.json",
     "*.dylib"
   ],
   "repository": {

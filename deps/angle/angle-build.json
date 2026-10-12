@@ -1,9 +1,15 @@
 {
-  "release": "angle-main-28385",
-  "angleCommit": "aa5f0107c9db735e9bcdc2f2c5abebfbfa939e17",
+  "release": "angle-dev-2026-10-11-4bbd983",
+  "channel": "dev",
+  "angleCommit": "f74e5d77ca00e33e1e2e11ebd4aaf32e52a65360",
+  "upstreamCommit": "4bbd98390e404956c34010632f6d3e260c4f8057",
+  "workflowCommit": "5fdeca468c31e85de9642358b95a2516e5ad3371",
+  "artifactRunId": "38176008437",
+  "artifactUrl": "https://github.com/dsafdsaf132/angle-prebuilt/actions/runs/38176008437",
   "angleRef": "main",
   "buildType": "Release",
-  "generatedAt": "2026-07-19T01:41:30Z",
+  "generatedAt": "2026-10-11T21:52:04Z",
+  "swiftshader": true,
   "platforms": [
     "darwin-arm64",
     "darwin-x64",

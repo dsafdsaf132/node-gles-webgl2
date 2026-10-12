@@ -817,7 +817,9 @@ function testGetParameterSemantics(gl) {
     assert.strictEqual(gl.getParameter(gl.DRAW_BUFFER0 + maxDrawBuffers), null);
     assert.strictEqual(gl.getError(), gl.INVALID_ENUM);
   }
-  assert(gl.getParameter(gl.MAX_ELEMENT_INDEX) >= 0x7fffffff);
+  // GLES 3 requires at least 2^24 - 1; Vulkan/SwiftShader may expose less
+  // than the 2^31 - 1 limit typically reported by desktop GL backends.
+  assert(gl.getParameter(gl.MAX_ELEMENT_INDEX) >= 0xffffff);
   assert.strictEqual(typeof gl.getParameter(gl.MAX_CLIENT_WAIT_TIMEOUT_WEBGL),
                      "number");
 

@@ -146,6 +146,24 @@ with `node-gyp`. The bundled ANGLE revision and platform inventory are recorded
 in `deps/angle/angle-build.json`. ANGLE is distributed under its BSD-style
 license in `deps/angle/LICENSE` and each platform package.
 
+The bundled dev build includes Vulkan and SwiftShader on all six platforms;
+macOS also includes the Metal backend. Each platform package contains its
+original `angle-build.json`, SwiftShader library, ICD manifest, and license.
+The source build run is recorded in `deps/angle/angle-build.json` because the
+release-tag archives may predate the SwiftShader rebuild.
+
+For software rendering without a GPU or X server, select SwiftShader before
+starting Node.js:
+
+```sh
+ANGLE_DEFAULT_PLATFORM=swiftshader node your-script.js
+```
+
+Termux/proot can deny executable permissions for SwiftShader's named JIT
+memory mappings (`mprotect` returns `EACCES`). In that environment, context
+creation and clears can work while shader rendering fails; the standard
+Linux build does not remove that Android execution restriction.
+
 The publish workflow releases the six platform packages before the main
 package. The first release requires an npm granular access token in the
 `NPM_TOKEN` repository secret because npm trusted publishing can only be

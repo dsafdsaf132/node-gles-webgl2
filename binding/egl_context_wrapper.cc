@@ -17,7 +17,10 @@
 
 #include "egl_context_wrapper.h"
 
+#include <algorithm>
+#include <cctype>
 #include <cstdio>
+#include <cstdlib>
 #include <iomanip>
 #include <iostream>
 #include <map>
@@ -149,25 +152,45 @@ bool EGLContextWrapper::InitEGL(napi_env env,
   EGLint minor = 0;
   bool had_display = false;
 
+  const char* platform_env = std::getenv("ANGLE_DEFAULT_PLATFORM");
+  std::string requested_platform = platform_env ? platform_env : "";
+  std::transform(requested_platform.begin(), requested_platform.end(),
+                 requested_platform.begin(), [](unsigned char character) {
+                   return static_cast<char>(std::tolower(character));
+                 });
+
   std::vector<EGLAttrib> platform_types;
 #if defined(__APPLE__) && defined(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE)
-  platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE);
+  if (requested_platform.empty()) {
+    platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE);
+  }
 #endif
   platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_DEFAULT_ANGLE);
 #if defined(__arm__) && defined(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE)
   // Most NVIDIA drivers will not work properly with
   // EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE, only enable this option on ARM
   // devices for now:
-  platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
+  if (requested_platform.empty()) {
+    platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
+  }
 #endif
 #if defined(__APPLE__) && defined(EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE)
-  platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE);
+  if (requested_platform.empty()) {
+    platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGL_ANGLE);
+  }
 #endif
 
   for (EGLAttrib platform_type : platform_types) {
     std::vector<EGLAttrib> display_attributes;
     display_attributes.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
     display_attributes.push_back(platform_type);
+#if defined(__linux__)
+    // SwiftShader renders pbuffers without X11/Wayland surface extensions.
+    if (requested_platform == "swiftshader") {
+      display_attributes.push_back(EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE);
+      display_attributes.push_back(EGL_PLATFORM_SURFACELESS_MESA);
+    }
+#endif
     display_attributes.push_back(EGL_NONE);
 
     EGLDisplay candidate = eglGetPlatformDisplay(
