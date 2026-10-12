@@ -63,6 +63,9 @@ jobs:
           $angleDir = node scripts/resolve-angle-path.js
           Copy-Item "$angleDir\*.dll" `
             -Destination $nodeDir -Force
+          # ANGLE resolves the SwiftShader ICD relative to its loaded DLL.
+          Copy-Item "$angleDir\vk_swiftshader_icd.json" `
+            -Destination $nodeDir -Force
 
       - name: Build TypeScript
         run: npm run build
