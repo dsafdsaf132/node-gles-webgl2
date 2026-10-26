@@ -476,24 +476,26 @@ function testDisjointTimerQueryWebGL2(gl) {
     assert(Number.isInteger(bits) && (bits === 0 || (bits >= 30 && bits <= 64)),
         "timer counter bits should be zero or between 30 and 64");
   }
-  gl.getParameter(ext.GPU_DISJOINT_EXT); // Start the timestamp validity interval.
 
-  const query = gl.createQuery();
-  ext.queryCounterEXT(query, ext.TIMESTAMP_EXT);
-  gl.finish();
-  assert.strictEqual(
-      gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE), true);
-  const timestamp = gl.getQueryParameter(query, gl.QUERY_RESULT);
-  assert.strictEqual(typeof timestamp, "number");
-  const timestampDisjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
-  // EXT_disjoint_timer_query permits zero-bit counters (e.g. D3D11 timestamps).
-  if (timestampBits === 0) {
-    assert.strictEqual(timestamp, 0, "zero-bit timestamp counters should return zero");
-  } else if (!timestampDisjoint) {
-    assert(timestamp > 0, "timestamp query should return a positive value");
+  // Timestamp measurement is optional. Metal advertises zero bits and leaves
+  // queryCounter unimplemented; elapsed-time queries are still supported.
+  if (timestampBits > 0) {
+    gl.getParameter(ext.GPU_DISJOINT_EXT); // Start the timestamp validity interval.
+    const query = gl.createQuery();
+    ext.queryCounterEXT(query, ext.TIMESTAMP_EXT);
+    gl.finish();
+    assert.strictEqual(
+        gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE), true);
+    const timestamp = gl.getQueryParameter(query, gl.QUERY_RESULT);
+    assert.strictEqual(typeof timestamp, "number");
+    const timestampDisjoint = gl.getParameter(ext.GPU_DISJOINT_EXT);
+    if (!timestampDisjoint) {
+      assert(timestamp > 0, "timestamp query should return a positive value");
+    }
+    gl.deleteQuery(query);
   }
-  gl.deleteQuery(query);
 
+  gl.getParameter(ext.GPU_DISJOINT_EXT); // Start the elapsed validity interval.
   const elapsedQuery = gl.createQuery();
   gl.beginQuery(ext.TIME_ELAPSED_EXT, elapsedQuery);
   gl.clearColor(0.25, 0.5, 0.75, 1);
