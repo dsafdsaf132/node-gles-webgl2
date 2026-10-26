@@ -507,7 +507,11 @@ static napi_status GetUniformValueParam(napi_env env, napi_value value,
     *result = 0;
     return napi_ok;
   }
-  ENSURE_VALUE_IS_NUMBER_RETVAL(env, value, napi_invalid_arg);
+  // WebIDL converts a uniform value with ToNumber, so `true` sets 1, as in browsers.
+  if (value_type != napi_number) {
+    nstatus = napi_coerce_to_number(env, value, &value);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+  }
 
   nstatus = GetUniformNumberValue(env, value, result);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
@@ -1040,6 +1044,16 @@ static napi_status GetArrayLikeBuffer(napi_env env, napi_value array_like_value,
       napi_value cur_value;
       nstatus = napi_get_element(env, array_like_value, i, &cur_value);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+
+      // WebIDL converts each element of a numeric sequence with ToNumber, so
+      // [true, false] reads as [1, 0], as in browsers.
+      napi_valuetype cur_type;
+      nstatus = napi_typeof(env, cur_value, &cur_type);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+      if (cur_type != napi_number) {
+        nstatus = napi_coerce_to_number(env, cur_value, &cur_value);
+        ENSURE_NAPI_OK_RETVAL(env, nstatus, nstatus);
+      }
 
       switch (alb->array_type) {
         case kFloat32: {

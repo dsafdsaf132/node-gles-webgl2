@@ -1404,6 +1404,52 @@ void main() {
   assertNoError(gl, "inactive uniform location no-op without current program");
 }
 
+// WebIDL converts a uniform value, and each element of a numeric sequence, with
+// ToNumber, so browsers accept booleans and numeric strings. three.js passes
+// booleans for its bool uniforms.
+function testUniformValueConversion(gl) {
+  const program = createProgramFromSources(gl, `#version 300 es
+void main() {
+  gl_Position = vec4(0.0, 0.0, 0.0, 1.0);
+}
+`, `#version 300 es
+precision highp float;
+uniform int u_flag;
+uniform float u_scale;
+uniform ivec2 u_pair;
+uniform vec2 u_vector;
+out vec4 out_color;
+void main() {
+  out_color = vec4(float(u_flag) * u_scale, vec2(u_pair) + u_vector, 1.0);
+}
+`);
+  gl.useProgram(program);
+  const flag = gl.getUniformLocation(program, "u_flag");
+  const scale = gl.getUniformLocation(program, "u_scale");
+  const pair = gl.getUniformLocation(program, "u_pair");
+  const vector = gl.getUniformLocation(program, "u_vector");
+
+  gl.uniform1i(flag, true);
+  assert.strictEqual(gl.getUniform(program, flag), 1, "uniform1i(true)");
+  gl.uniform1i(flag, false);
+  assert.strictEqual(gl.getUniform(program, flag), 0, "uniform1i(false)");
+  gl.uniform1i(flag, "3");
+  assert.strictEqual(gl.getUniform(program, flag), 3, "uniform1i(\"3\")");
+  gl.uniform1f(scale, true);
+  assert.strictEqual(gl.getUniform(program, scale), 1, "uniform1f(true)");
+  gl.uniform2iv(pair, [true, false]);
+  assert.deepStrictEqual(
+      Array.from(gl.getUniform(program, pair)), [1, 0], "uniform2iv booleans");
+  gl.uniform2fv(vector, [true, "0.5"]);
+  assert.deepStrictEqual(
+      Array.from(gl.getUniform(program, vector)), [1, 0.5],
+      "uniform2fv boolean and string");
+  assert.throws(() => gl.uniform1i(flag, Symbol("x")), TypeError);
+  assert.throws(() => gl.uniform2iv(pair, [Symbol("x"), 1]), TypeError);
+  assertNoError(gl, "uniform value conversion");
+  gl.useProgram(null);
+}
+
 function testUniformLocationProgramValidation(gl) {
   const vertexSource = `#version 300 es
 void main() {
@@ -3337,6 +3383,7 @@ testPixelBufferObjectNumericOffsets(gl);
 testMultisampleFramebufferOperations(gl);
 testTexStorage2DAndMultiPixelReadback(gl);
 testUnsignedIntegerUniforms(gl);
+testUniformValueConversion(gl);
 testUniformLocationProgramValidation(gl);
 testUniformLocationContextValidation(gl);
 testNonSquareUniformMatrices(gl);
