@@ -1124,6 +1124,8 @@ static napi_status GetOptionalArrayLengthParam(napi_env env, napi_value value,
   return napi_ok;
 }
 
+// Generic array elements may run JavaScript during conversion. Callers must
+// revalidate and restore their context before accessing native resources.
 static napi_status GetArrayLikeBufferView(
     napi_env env, napi_value value, uint32_t element_offset,
     bool has_length_override, uint32_t length_override, const char *name,
@@ -4541,6 +4543,8 @@ napi_value WebGLRenderingContext::CompressedTexImage2D(
         GetArrayLikeBufferView(env, args[6], src_offset, has_src_length,
                                src_length, "srcData", &alb, &data, &image_size);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   }
 
   context->eglContextWrapper_->glCompressedTexImage2D(
@@ -4635,6 +4639,8 @@ napi_value WebGLRenderingContext::CompressedTexImage3D(
     nstatus =
         GetArrayLikeBufferView(env, args[7], src_offset, has_src_length,
                                src_length, "srcData", &alb, &data, &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   }
 
@@ -4746,6 +4752,8 @@ napi_value WebGLRenderingContext::CompressedTexSubImage2D(
         GetArrayLikeBufferView(env, args[7], src_offset, has_src_length,
                                src_length, "srcData", &alb, &data, &image_size);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   }
 
   context->eglContextWrapper_->glCompressedTexSubImage2D(
@@ -4848,6 +4856,8 @@ napi_value WebGLRenderingContext::CompressedTexSubImage3D(
     nstatus =
         GetArrayLikeBufferView(env, args[9], src_offset, has_src_length,
                                src_length, "srcData", &alb, &data, &image_size);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   }
 
@@ -9749,6 +9759,8 @@ napi_value WebGLRenderingContext::ReadPixels(napi_env env,
     nstatus = GetArrayLikeBufferView(env, args[6], dst_offset, false, 0,
                                      "pixels", &alb, &view_data, &byte_length);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     nstatus = ValidatePixelDataCapacity(
         env, context->pixel_store_state_, true, width, height, 1, format, type,
         static_cast<size_t>(byte_length), "pixels");
@@ -10155,6 +10167,8 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
       nstatus = GetArrayLikeBufferView(env, args[8], src_offset, false, 0,
                                        "srcData", &alb, &data, &byte_length);
       ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+      nstatus = UnwrapContext(env, js_this, &context);
+      ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
       source_byte_count = static_cast<size_t>(byte_length);
       source_kind = TextureUploadSourceKind::kMemory;
       has_source_data = true;
@@ -10293,6 +10307,8 @@ napi_value WebGLRenderingContext::TexImage3D(napi_env env,
     GLsizei byte_length = 0;
     nstatus = GetArrayLikeBufferView(env, args[9], src_offset, false, 0,
                                      "srcData", &alb, &data, &byte_length);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     if (!NeedsWebGLUnpackStaging(context->pixel_store_state_, height, format,
                                  type)) {
@@ -10751,6 +10767,8 @@ napi_value WebGLRenderingContext::TexSubImage2D(napi_env env,
     nstatus = GetArrayLikeBufferView(env, args[8], src_offset, false, 0,
                                      "srcData", &alb, &data, &byte_length);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     source_byte_count = static_cast<size_t>(byte_length);
     source_kind = TextureUploadSourceKind::kMemory;
   } else {
@@ -10873,6 +10891,8 @@ napi_value WebGLRenderingContext::TexSubImage3D(napi_env env,
     GLsizei byte_length = 0;
     nstatus = GetArrayLikeBufferView(env, args[10], src_offset, false, 0,
                                      "srcData", &alb, &data, &byte_length);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     if (!NeedsWebGLUnpackStaging(context->pixel_store_state_, height, format,
                                  type)) {

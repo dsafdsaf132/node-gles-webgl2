@@ -1454,16 +1454,79 @@ function testArrayConversionCanDestroyContextSafely() {
   const child = spawnSync(process.execPath, ["-e", `
     const assert = require("assert");
     const api = require(${JSON.stringify(path.resolve(__dirname, ".."))});
-    const gl = api.createWebGLRenderingContext({width: 1, height: 1});
-    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
-    assert.throws(() => gl.bufferData(gl.ARRAY_BUFFER, [{
-      valueOf() { gl.destroy(); return 1; }
-    }], gl.STATIC_DRAW), /destroyed/);
+    const cases = [
+      (gl, data) => gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW),
+      (gl, data) => gl.bufferSubData(gl.ARRAY_BUFFER, 0, data),
+      (gl, data) => gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data),
+      (gl, data) => gl.texImage2D(
+          gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE,
+          {width: 1, height: 1, data}),
+      (gl, data) => gl.texImage2D(
+          gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, data),
+      (gl, data) => gl.texImage3D(
+          gl.TEXTURE_3D, 0, gl.RGBA8, 1, 1, 1, 0, gl.RGBA,
+          gl.UNSIGNED_BYTE, data),
+      (gl, data) => gl.texSubImage2D(
+          gl.TEXTURE_2D, 0, 0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data),
+      (gl, data) => gl.texSubImage3D(
+          gl.TEXTURE_3D, 0, 0, 0, 0, 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, data),
+      // Conversion precedes GL validation, so no compression extension is needed.
+      (gl, data) => gl.compressedTexImage2D(gl.TEXTURE_2D, 0, 0, 1, 1, 0, data),
+      (gl, data) => gl.compressedTexImage3D(gl.TEXTURE_3D, 0, 0, 1, 1, 1, 0, data),
+      (gl, data) => gl.compressedTexSubImage2D(
+          gl.TEXTURE_2D, 0, 0, 0, 1, 1, 0, data),
+      (gl, data) => gl.compressedTexSubImage3D(
+          gl.TEXTURE_3D, 0, 0, 0, 0, 1, 1, 1, 0, data)
+    ];
+    for (const run of cases) {
+      console.log(run.toString());
+      const gl = api.createWebGLRenderingContext({width: 1, height: 1});
+      const data = [{valueOf() { gl.destroy(); return 0; }}];
+      assert.throws(() => run(gl, data), /destroyed/, run.toString());
+    }
   `], {cwd: path.resolve(__dirname, ".."), encoding: "utf8"});
   assert.strictEqual(child.status, 0,
-      `bufferData conversion after destroy failed: ${child.stderr}`);
+      `array conversion after destroy failed (${child.signal}):\n${child.stdout}\n${child.stderr}`);
   assert.strictEqual(child.signal, null,
-      `bufferData conversion after destroy crashed: ${child.signal}`);
+      `array conversion after destroy crashed: ${child.signal}`);
+}
+
+function testArrayConversionRestoresCurrentContext() {
+  const gl = createContext({width: 1, height: 1});
+  const other = createContext({width: 1, height: 1});
+  try {
+    const texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+        gl.UNSIGNED_BYTE, new Uint8Array([255, 0, 0, 255]));
+    const framebuffer = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0,
+        gl.TEXTURE_2D, texture, 0);
+
+    const otherTexture = other.createTexture();
+    other.bindTexture(other.TEXTURE_2D, otherTexture);
+    other.texImage2D(other.TEXTURE_2D, 0, other.RGBA, 1, 1, 0, other.RGBA,
+        other.UNSIGNED_BYTE, new Uint8Array([0, 0, 255, 255]));
+    const otherFramebuffer = other.createFramebuffer();
+    other.bindFramebuffer(other.FRAMEBUFFER, otherFramebuffer);
+    other.framebufferTexture2D(other.FRAMEBUFFER, other.COLOR_ATTACHMENT0,
+        other.TEXTURE_2D, otherTexture, 0);
+
+    // The converted float 0 occupies four zero bytes, one RGBA8 pixel.
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA,
+        gl.UNSIGNED_BYTE, [{valueOf() { other.finish(); return 0; }}]);
+    const pixel = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    assert.deepStrictEqual(Array.from(pixel), [0, 0, 0, 0]);
+    other.readPixels(0, 0, 1, 1, other.RGBA, other.UNSIGNED_BYTE, pixel);
+    assert.deepStrictEqual(Array.from(pixel), [0, 0, 255, 255]);
+    assertNoError(gl, "array conversion restores owning context");
+    assertNoError(other, "array conversion preserves other context");
+  } finally {
+    gl.destroy();
+    other.destroy();
+  }
 }
 
 function testUniformLocationProgramValidation(gl) {
@@ -3401,6 +3464,7 @@ testTexStorage2DAndMultiPixelReadback(gl);
 testUnsignedIntegerUniforms(gl);
 testUniformValueConversion(gl);
 testArrayConversionCanDestroyContextSafely();
+testArrayConversionRestoresCurrentContext();
 testUniformLocationProgramValidation(gl);
 testUniformLocationContextValidation(gl);
 testNonSquareUniformMatrices(gl);

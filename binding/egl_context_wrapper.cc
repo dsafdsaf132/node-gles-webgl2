@@ -213,8 +213,8 @@ bool EGLContextWrapper::InitEGL(napi_env env,
 #if defined(__linux__)
     // SwiftShader renders pbuffers without X11/Wayland surface extensions, and
     // a headless process has no X11 or Wayland display to open.
-    if (requested_platform == "swiftshader" || requested_platform == "gl" ||
-        (headless && !termux_host)) {
+    if (requested_platform == "swiftshader" ||
+        (headless && (!termux_host || requested_platform == "gl"))) {
       display_attributes.push_back(EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE);
       display_attributes.push_back(EGL_PLATFORM_SURFACELESS_MESA);
     }
