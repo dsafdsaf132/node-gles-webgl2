@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - fix/macos-x64-swiftshader-smoke
   schedule:
     - cron: "0 2 * * 0"
 
