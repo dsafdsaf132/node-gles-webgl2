@@ -159,7 +159,23 @@ bool EGLContextWrapper::InitEGL(napi_env env,
                    return static_cast<char>(std::tolower(character));
                  });
 
+#if defined(__linux__)
+  // With neither an X11 nor a Wayland display, ANGLE's default display cannot
+  // open. Mesa's surfaceless platform needs no display, and ANGLE's OpenGL ES
+  // backend on it reaches the GPU, so a headless process tries that first.
+  auto unset = [](const char* name) {
+    const char* value = std::getenv(name);
+    return value == nullptr || value[0] == '\0';
+  };
+  const bool headless = unset("DISPLAY") && unset("WAYLAND_DISPLAY");
+#endif
+
   std::vector<EGLAttrib> platform_types;
+#if defined(__linux__) && defined(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE)
+  if (headless && requested_platform.empty()) {
+    platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
+  }
+#endif
 #if defined(__APPLE__) && defined(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE)
   if (requested_platform.empty()) {
     platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_METAL_ANGLE);
@@ -185,8 +201,9 @@ bool EGLContextWrapper::InitEGL(napi_env env,
     display_attributes.push_back(EGL_PLATFORM_ANGLE_TYPE_ANGLE);
     display_attributes.push_back(platform_type);
 #if defined(__linux__)
-    // SwiftShader renders pbuffers without X11/Wayland surface extensions.
-    if (requested_platform == "swiftshader") {
+    // SwiftShader renders pbuffers without X11/Wayland surface extensions, and
+    // a headless process has no X11 or Wayland display to open.
+    if (requested_platform == "swiftshader" || headless) {
       display_attributes.push_back(EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE);
       display_attributes.push_back(EGL_PLATFORM_SURFACELESS_MESA);
     }
