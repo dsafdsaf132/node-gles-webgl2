@@ -1450,6 +1450,22 @@ void main() {
   gl.useProgram(null);
 }
 
+function testArrayConversionCanDestroyContextSafely() {
+  const child = spawnSync(process.execPath, ["-e", `
+    const assert = require("assert");
+    const api = require(${JSON.stringify(path.resolve(__dirname, ".."))});
+    const gl = api.createWebGLRenderingContext({width: 1, height: 1});
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    assert.throws(() => gl.bufferData(gl.ARRAY_BUFFER, [{
+      valueOf() { gl.destroy(); return 1; }
+    }], gl.STATIC_DRAW), /destroyed/);
+  `], {cwd: path.resolve(__dirname, ".."), encoding: "utf8"});
+  assert.strictEqual(child.status, 0,
+      `bufferData conversion after destroy failed: ${child.stderr}`);
+  assert.strictEqual(child.signal, null,
+      `bufferData conversion after destroy crashed: ${child.signal}`);
+}
+
 function testUniformLocationProgramValidation(gl) {
   const vertexSource = `#version 300 es
 void main() {
@@ -3384,6 +3400,7 @@ testMultisampleFramebufferOperations(gl);
 testTexStorage2DAndMultiPixelReadback(gl);
 testUnsignedIntegerUniforms(gl);
 testUniformValueConversion(gl);
+testArrayConversionCanDestroyContextSafely();
 testUniformLocationProgramValidation(gl);
 testUniformLocationContextValidation(gl);
 testNonSquareUniformMatrices(gl);

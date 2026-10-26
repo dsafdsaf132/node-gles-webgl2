@@ -19,6 +19,9 @@
 
 #include <algorithm>
 #include <cctype>
+#if defined(__linux__)
+#include <unistd.h>
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>
@@ -168,11 +171,18 @@ bool EGLContextWrapper::InitEGL(napi_env env,
     return value == nullptr || value[0] == '\0';
   };
   const bool headless = unset("DISPLAY") && unset("WAYLAND_DISPLAY");
+  // Termux's proot environments can expose the Android Mesa driver without
+  // its required host kernel interfaces. Probing it may terminate the process
+  // inside libpciaccess instead of returning an EGL error. Keep the automatic
+  // headless GLES probe for Linux hosts such as Raspberry Pi, while requiring
+  // an explicit ANGLE_DEFAULT_PLATFORM=gl opt-in in Termux.
+  const bool termux_host =
+      access("/data/data/com.termux/files/usr", F_OK) == 0;
 #endif
 
   std::vector<EGLAttrib> platform_types;
 #if defined(__linux__) && defined(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE)
-  if (headless && requested_platform.empty()) {
+  if (headless && !termux_host && requested_platform.empty()) {
     platform_types.push_back(EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE);
   }
 #endif
@@ -203,7 +213,8 @@ bool EGLContextWrapper::InitEGL(napi_env env,
 #if defined(__linux__)
     // SwiftShader renders pbuffers without X11/Wayland surface extensions, and
     // a headless process has no X11 or Wayland display to open.
-    if (requested_platform == "swiftshader" || headless) {
+    if (requested_platform == "swiftshader" || requested_platform == "gl" ||
+        (headless && !termux_host)) {
       display_attributes.push_back(EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE);
       display_attributes.push_back(EGL_PLATFORM_SURFACELESS_MESA);
     }

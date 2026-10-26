@@ -3955,6 +3955,11 @@ napi_value WebGLRenderingContext::BufferData(napi_env env,
     nstatus = GetArrayLikeBuffer(env, args[1], &alb);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
+    // ToNumber can run user JavaScript (for example, valueOf). That callback
+    // may destroy this context or make a different context current.
+    nstatus = UnwrapContext(env, js_this, &context);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+
     if (alb.length >
         static_cast<size_t>(std::numeric_limits<GLsizeiptr>::max())) {
       NAPI_THROW_ERROR(env, "buffer data size is out of range");
@@ -4007,6 +4012,10 @@ napi_value WebGLRenderingContext::BufferSubData(napi_env env,
 
   ArrayLikeBuffer alb;
   nstatus = GetArrayLikeBuffer(env, args[2], &alb);
+  ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+  // ToNumber can run user JavaScript, which may destroy this context or make
+  // a different context current.
+  nstatus = UnwrapContext(env, js_this, &context);
   ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
   if (alb.length >
       static_cast<size_t>(std::numeric_limits<GLsizeiptr>::max())) {
@@ -10072,6 +10081,8 @@ napi_value WebGLRenderingContext::TexImage2D(napi_env env,
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
 
     nstatus = GetArrayLikeBuffer(env, data_value, &alb);
+    ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
+    nstatus = UnwrapContext(env, js_this, &context);
     ENSURE_NAPI_OK_RETVAL(env, nstatus, nullptr);
     data = alb.data;
     source_byte_count = alb.length;
