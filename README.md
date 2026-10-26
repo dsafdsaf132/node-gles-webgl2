@@ -28,12 +28,9 @@ through WebGL2-compatible JavaScript method names.
 | Linux x64     | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
 | Linux arm64   | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
 | macOS arm64   | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
-| macOS x64     | ![build only](https://img.shields.io/badge/CI-build%20only-yellow) |
+| macOS x64     | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
 | Windows x64   | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
 | Windows arm64 | ![tested](https://img.shields.io/badge/CI-tested-brightgreen)      |
-
-macOS x64 is build-only in CI because hosted-runner smoke currently hits
-`Error: No display`.
 
 ## Extension Support
 
